@@ -215,7 +215,7 @@ class PlayerBall extends Ball {
     this.speed = 0.005
   }
   update() {
-    if (!(this instanceof AIPlayerBall) && !gameState.gameOver) this.mouse = gameState.mouse
+    if (!gameState.gameOver) this.mouse = gameState.mouse
     this.text = this.health
     if (gameState.gameOver) {
       this.size = 0
@@ -662,7 +662,7 @@ const runGame = () => {
 const init = () => {
   gameState.gameOver = true
   gameState.preGame = true
-  gameState.player = new AIPlayerBall({health: Infinity})
+  gameState.player = new AIPlayerBall()
   gameState.shields = []
   gameState.enemies = []
   gameState.explosions = []
