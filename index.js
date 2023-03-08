@@ -22,15 +22,16 @@ canvas.height = window.innerHeight
 canvas.width = window.innerWidth
 
 const drawBackground = () => {
+  if (gameState.features.hyperTrail) return
   ctx.globalAlpha = 1
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-let getGameSize = () => Math.max(canvas.width, canvas.height)
+const getGameSize = () => Math.max(canvas.width, canvas.height)
 gameState.size = getGameSize()
 
-let getGameOffset = () => {
+const getGameOffset = () => {
   if (canvas.width > canvas.height) {
     return {
       x: 0,
@@ -83,11 +84,14 @@ const getScaledFont = (scalar = 1) => `${gameState.size * .02 * scalar}px sans-s
 
 const getScaledFontPixelValue = (scalar = 1) => gameState.size * .02 * scalar
 
+const spacer = getScaledFontPixelValue(2)
+
 const incrementScore = () => !gameState.gameOver && gameState.score++
+
+const incrementTime = () => gameState.t++
 
 class StartMenu {
   draw() {
-    const spacer = getScaledFontPixelValue(2)
     ctx.font = getScaledFont(2);
     ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
@@ -121,6 +125,7 @@ class InGameMenu {
     ctx.textAlign = 'start'
     ctx.textBaseline = 'hanging'
     ctx.fillText(`Score: ${gameState.score}`, padding, padding);
+    ctx.fillText(`Time: ${gameState.t}`, padding, padding + spacer);
   }
 }
 
@@ -132,14 +137,16 @@ class EndGameMenu {
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center'
     ctx.textBaseline = 'ideographic'
-    ctx.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - spacer);
+    ctx.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - spacer * 2);
     ctx.font = getScaledFont(1.5);
-    ctx.fillText(`Score: ${gameState.score}`, canvas.width / 2, canvas.height / 2); 
+    ctx.fillText(`Score: ${gameState.score}`, canvas.width / 2, canvas.height / 2 - spacer); 
+    ctx.font = getScaledFont(1.5);
+    ctx.fillText(`Time: ${gameState.gameOverTime}`, canvas.width / 2, canvas.height / 2); 
     ctx.font = getScaledFont(1.5);
     ctx.fillText(`Tap Enter to Restart`, canvas.width / 2, canvas.height / 2 + spacer); 
     ctx.font = getScaledFont(1);
-    ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (spacer * 2.2));
-    ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (spacer * 3));
+    ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
+    ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
   }
   update() {
     if (
@@ -527,7 +534,7 @@ const drawEndGameMenu = () => {
 }
  
 const draw = () => {
-  !gameState.features.hyperTrails && drawBackground()
+  drawBackground()
   gameState.player.draw()
   drawShields()
   drawEnemies()
@@ -636,6 +643,7 @@ const newGame = () => {
   gameState.explosions = []
   gameState.gameOver = false
   gameState.score = 0
+  gameState.t = 0
   gameState.keys = false
   gameState.mouse = false
   gameState.startMenu = false
@@ -647,6 +655,7 @@ const getIsGameOver = () => gameState.player.health <= 0
 
 gameOver = () => {
   gameState.gameOver = true
+  gameState.gameOverTime = gameState.t
   gameState.keys = false
   gameState.mouse = false
   gameState.player.mouse = false
@@ -667,7 +676,7 @@ const playGame = () => {
   }
   update()
   draw()
-  gameState.t += 1
+  incrementTime()
 }
 
 const runGame = () => {
