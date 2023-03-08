@@ -22,6 +22,7 @@ canvas.height = window.innerHeight
 canvas.width = window.innerWidth
 
 const drawBackground = () => {
+  ctx.globalAlpha = 1
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
@@ -88,6 +89,7 @@ class StartMenu {
   draw() {
     const spacer = getScaledFontPixelValue(2)
     ctx.font = getScaledFont(2);
+    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center'
     ctx.textBaseline = 'ideographic'
@@ -114,6 +116,7 @@ class InGameMenu {
   draw() {
     const padding = getScaledFontPixelValue()
     ctx.font = getScaledFont();
+    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'start'
     ctx.textBaseline = 'hanging'
@@ -125,6 +128,7 @@ class EndGameMenu {
   draw() {
     const spacer = getScaledFontPixelValue(2)
     ctx.font = getScaledFont(2);
+    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center'
     ctx.textBaseline = 'ideographic'
@@ -153,30 +157,65 @@ const togglePause = () => gameState.pause = !gameState.pause
 
 const randomIntRange = (min = 1, max = 100) =>  Math.floor(Math.random() * (max + 1 - min) + min)
 
-class Ball {
-  constructor({
-    x,
-    y,
-    size,
-    speedX,
-    speedY,
-    color,
-    opacity
-  } = {}) {
-    this.x = x || .5
-    this.y = y || .5
-    this.size = size || 0.03
-    this.speedX = speedX || 0
-    this.speedY = speedY || 0
-    this.color = color || 'black'
-    this.opacity = opacity || 1
-    this.text = undefined
-    this.textColor = 'black'
+const getPythagorean = (a, b) => Math.sqrt(a * a + b * b)
+
+const getAngleBetweenPoints = (
+  {x: x1, y: y1},
+  {x: x2, y: y2}
+ ) => Math.atan2((y2 - y1), (x2 - x1))
+
+class Entity {
+  constructor(props = {}) {
+    this.x = props.x || .5
+    this.y = props.y || .5
+    this.speedX = props.speedX || 0
+    this.speedY = props.speedY || 0
+    this.text = props.text
+    this.textColor = props.textColor || 'black'
   }
+
   update() {
     this.x += this.speedX
     this.y += this.speedY
   }
+
+  draw() {
+    const {x, y, text, textColor} = this
+    const {offset, size: gameStateSize} = gameState
+    if (text) {
+      ctx.globalAlpha = 1
+      ctx.fillStyle = textColor;
+      ctx.font = getScaledFont(1)
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(
+        text,
+        x * gameStateSize - offset.x,
+        y * gameStateSize - offset.y
+      )
+    }
+  }
+
+  getVelocityMagnitude() {
+    return getPythagorean(this.speedX, this.speedY)
+  }
+
+  getVelocityAngle() {
+    return getAngleBetweenPoints(
+      { x: 0, y: 0 },
+      { x: this.speedX, y: this.speedY }
+    )
+  }
+}
+class Ball extends Entity {
+  constructor(props = {}) {
+    super(props)
+    this.size = props.size || 0.03
+    this.color = props.color || 'white'
+    this.opacity = props.opacity || 1
+    this.textColor = 'black'
+  }
+
   draw() {
     const {color, x, y, size, opacity} = this
     const {offset, size: gameStateSize} = gameState
@@ -190,28 +229,16 @@ class Ball {
       0,
       Math.PI * 2)
     ctx.fill()
-    ctx.globalAlpha = 1
-    if (this.text) {
-      ctx.fillStyle = this.textColor;
-      ctx.font = getScaledFont(1)
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(
-        this.text,
-        x * gameStateSize - offset.x,
-        y * gameStateSize - offset.y
-      )
-    }
+    super.draw()
   }
 }
 
 class PlayerBall extends Ball {
-  constructor(props) {
+  constructor(props = {}) {
     super(props)
-    this.health = props ? props.health : 10
+    this.health = props.health || 10
     this.text = this.health
     this.color = `hsl(${12 * this.health} 100% 50%)`
-    this.textColor = 'black'
     this.speed = 0.005
   }
   update() {
@@ -244,7 +271,7 @@ class AIPlayerBall extends PlayerBall {
     if (!(gameState.t % 10 == 0)) return
     const closestEnemy = getClosestEnemy()
     if (!closestEnemy) return;
-    const angleAwayFromEnemy = getAngleToLocation(gameState.player, closestEnemy) + Math.PI;
+    const angleAwayFromEnemy = getAngleBetweenPoints(gameState.player, closestEnemy) + Math.PI;
     this.mouse = {
       clicked: true,
       x: Math.cos(angleAwayFromEnemy),
@@ -264,14 +291,14 @@ const moveBasedOnMouse = (ball) => {
   if (gameState.player.mouse) {
     const distanceToPlayer = getDistanceBetweenBallCenters(gameState.player.mouse, gameState.player)
     if (distanceToPlayer <= gameState.player.size) return
-    const angleToMouse = getAngleToLocation(gameState.player, gameState.player.mouse)
+    const angleToMouse = getAngleBetweenPoints(gameState.player, gameState.player.mouse)
     ball.x -= gameState.player.speed * Math.cos(angleToMouse)
     ball.y -= gameState.player.speed * Math.sin(angleToMouse)
   }
 }
 
 const setSpeedTowardsTarget = (ball1, ball2, speed) => {
-  const angleToTarget = getAngleToLocation(ball1, ball2)
+  const angleToTarget = getAngleBetweenPoints(ball1, ball2)
   ball1.speedX = speed * Math.cos(angleToTarget)
   ball1.speedY = speed * Math.sin(angleToTarget)
 }
@@ -338,12 +365,12 @@ class DumbEnemyBall extends EnemyBall {
 }
 
 class Explosion extends Ball {  
-  constructor(props) {
+  constructor(props = {}) {
     super(props)
     this.size = props.size || 0.01
     this.color = props.color || 'BlueViolet'
-    this.opacity = 1
   }
+
   update() {
     super.update()
     this.size += 0.001
@@ -352,8 +379,8 @@ class Explosion extends Ball {
 }
 
 class Shield extends Ball {
-  constructor() {
-    super()
+  constructor(props = {}) {
+    super(props)
     this.size = 0.02
     this.color = 'deepskyblue'
     this.opacity = 1
@@ -373,12 +400,6 @@ class Shield extends Ball {
 const createExplosion = ({x, y, ...other}) => {
   if (!gameState.features.createExplosion) return
   gameState.explosions.push(new Explosion({x, y, ...other}))
-}
-
-const getPythagorean = (a, b) => Math.sqrt(a * a + b * b)
-
-const getAngleToLocation = (ball1, ball2) => {
-  return Math.atan2((ball2.y - ball1.y), (ball2.x - ball1.x))
 }
 
 const getDistanceBetweenBallCenters = (ball1, ball2) => 
