@@ -22,10 +22,11 @@ canvas.height = window.innerHeight
 canvas.width = window.innerWidth
 
 const drawBackground = () => {
-  if (gameState.features.hyperTrail) return
-  ctx.globalAlpha = 1
+  if (gameState.features.hyperTrails) return
+  ctx.save()
   ctx.fillStyle = "black";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore()
 }
 
 const getGameSize = () => Math.max(canvas.width, canvas.height)
@@ -50,6 +51,7 @@ gameState.offset = getGameOffset()
 
 const drawCenterRetical = () => {
   if (!gameState.features.drawCenterRetical) return
+  ctx.save()
   ctx.strokeStyle = 'red'
   ctx.lineWidth = 3
   ctx.beginPath()
@@ -59,10 +61,12 @@ const drawCenterRetical = () => {
   ctx.moveTo(canvas.width / 2, canvas.height / 2 - 10)
   ctx.lineTo(canvas.width / 2, canvas.height / 2 + 10)
   ctx.stroke()
+  ctx.restore()
 }
 
 const drawGameGrid = () => {
   if (!gameState.features.drawGameGrid) return
+  ctx.save()
   ctx.strokeStyle = 'red'
   ctx.lineWidth = 1
   ctx.beginPath()
@@ -78,6 +82,7 @@ const drawGameGrid = () => {
     ctx.lineTo(gameState.size, gameState.size * y * 0.1 - gameState.offset.y)
     ctx.stroke()
   }
+  ctx.restore()
 }
 
 const getScaledFont = (scalar = 1) => `${gameState.size * .02 * scalar}px sans-serif`
@@ -92,8 +97,8 @@ const incrementTime = () => gameState.t++
 
 class StartMenu {
   draw() {
+    ctx.save()
     ctx.font = getScaledFont(2);
-    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center'
     ctx.textBaseline = 'ideographic'
@@ -103,6 +108,7 @@ class StartMenu {
     ctx.font = getScaledFont(1);
     ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (spacer * 2.2));
     ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (spacer * 3));
+    ctx.restore()
   }
   update() {
     if (
@@ -118,22 +124,23 @@ class StartMenu {
 
 class InGameMenu {
   draw() {
-    const padding = getScaledFontPixelValue()
+    const padding = spacer / 2
+    ctx.save()
     ctx.font = getScaledFont();
-    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'start'
     ctx.textBaseline = 'hanging'
     ctx.fillText(`Score: ${gameState.score}`, padding, padding);
     ctx.fillText(`Time: ${gameState.t}`, padding, padding + spacer);
+    ctx.restore()
   }
 }
 
 class EndGameMenu {
   draw() {
     const spacer = getScaledFontPixelValue(2)
+    ctx.save()
     ctx.font = getScaledFont(2);
-    ctx.globalAlpha = 1
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center'
     ctx.textBaseline = 'ideographic'
@@ -147,6 +154,7 @@ class EndGameMenu {
     ctx.font = getScaledFont(1);
     ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
     ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
+    ctx.restore()
   }
   update() {
     if (
@@ -190,7 +198,7 @@ class Entity {
     const {x, y, text, textColor} = this
     const {offset, size: gameStateSize} = gameState
     if (text) {
-      ctx.globalAlpha = 1
+      ctx.save()
       ctx.fillStyle = textColor;
       ctx.font = getScaledFont(1)
       ctx.textAlign = 'center'
@@ -200,6 +208,7 @@ class Entity {
         x * gameStateSize - offset.x,
         y * gameStateSize - offset.y
       )
+      ctx.restore()
     }
   }
 
@@ -226,6 +235,7 @@ class Ball extends Entity {
   draw() {
     const {color, x, y, size, opacity} = this
     const {offset, size: gameStateSize} = gameState
+    ctx.save()
     ctx.fillStyle = color
     ctx.globalAlpha = opacity
     ctx.beginPath()
@@ -236,6 +246,7 @@ class Ball extends Entity {
       0,
       Math.PI * 2)
     ctx.fill()
+    ctx.restore()
     super.draw()
   }
 }
@@ -698,7 +709,7 @@ const init = () => {
   gameState.explosions = []
   gameState.size = getGameSize()
   gameState.startMenu = new StartMenu()
-  runGame() 
+  runGame()
 }
 
 init()
