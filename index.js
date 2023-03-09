@@ -127,8 +127,9 @@ class InGameMenu {
     canvasContext.fillStyle = 'white';
     canvasContext.textAlign = 'start'
     canvasContext.textBaseline = 'hanging'
-    canvasContext.fillText(`Score: ${gameState.score}`, padding, padding);
-    canvasContext.fillText(`Time: ${gameState.t}`, padding, padding + spacer);
+    canvasContext.fillText(`Level ${gameState.level}`, padding, padding);
+    canvasContext.fillText(`Score: ${gameState.score}`, padding, padding + spacer);
+    canvasContext.fillText(`Time: ${gameState.t}`, padding, padding + spacer * 2);
     canvasContext.restore()
   }
 }
@@ -192,6 +193,7 @@ const removeSelfFromArray = (entity, array) => {
 class Entity {
   constructor(props = {}) {
     this.id = ++idCounter
+    this.createdDate = new Date()
     this.x = props.x || .5
     this.y = props.y || .5
     this.speedX = props.speedX || 0
@@ -374,8 +376,8 @@ const setRandomLocationOnEdge = (ball) => {
 }
 
 class EnemyBall extends Ball {
-  constructor() {
-    super()
+  constructor(props = {}) {
+    super(props)
     this.color = 'darkred'
     this.size = 0.02
     setRandomLocationOnEdge(this)
@@ -392,24 +394,24 @@ class EnemyBall extends Ball {
   }
 }
 
-class SlowEnemyBall extends EnemyBall {
-  constructor() {
-    super()
-    this.speedX = this.speedX * .75
-    this.speedY = this.speedY * .75
-    this.size = 0.026
-    this.color = 'orangered'
-  }
-}
-
 class SmartEnemyBall extends EnemyBall {
-  constructor() {
-    super()
+  constructor(props = {}) {
+    super(props)
     this.color = 'red'
   }
   update() {
     super.update()
     setSpeedTowardsTarget(this, gameState.player, getPythagorean(this.speedX, this.speedY))
+  }
+}
+
+class SlowEnemyBall extends SmartEnemyBall {
+  constructor(props = {}) {
+    super(props)
+    this.speedX = this.speedX * .75
+    this.speedY = this.speedY * .75
+    this.size = 0.026
+    this.color = 'orangered'
   }
 }
 
@@ -448,7 +450,7 @@ class Shield extends Ball {
     this.speed = 1
   }
   update() {
-    this.angle += Math.PI / 100 * this.speed
+    this.angle += Math.PI / (100 / Math.min(gameState.level, 11)) * this.speed
     this.x = .5 + (this.distanceFromCenter * Math.cos(this.angle))
     this.y = .5 + (this.distanceFromCenter * Math.sin(this.angle))
   }
@@ -478,11 +480,14 @@ const getCollisionDetected = (ball1, ball2) => {
   }
 }
 
+const handleLevel = () => {
+  if (gameState.t % 1000 === 0 && gameState.t !== 0) gameState.level++
+}
+
 const handleSpawnEnemies = () => {
   if (!gameState.features.handleSpawnEnemies) return
-  if (gameState.t % 4 === 0 && gameState.enemies.length < 200) {
+  if (gameState.t % (11 - Math.min(10, gameState.level)) === 0 && gameState.enemies.length < 200) {
     const random = randomIntRange(1, 3)
-    const nEnemies = gameState.enemies.length
     switch (random) {
       case 1:
         gameState.enemies.push(new EnemyBall())
@@ -498,6 +503,7 @@ const handleSpawnEnemies = () => {
 }
 
 const update = () => {
+  handleLevel()
   ;([
     gameState.player,
     ...gameState.shields,
@@ -622,6 +628,7 @@ const newGame = () => {
   gameState.gameOver = false
   gameState.score = 0
   gameState.t = 0
+  gameState.level = 1
   gameState.keys = false
   gameState.mouse = false
 }
@@ -666,6 +673,7 @@ const init = () => {
   gameState.t = 0
   gameState.gameOver = true
   gameState.preGame = true
+  gameState.level = 3
   gameState.player = new AIPlayerBall()
   gameState.shields = []
   gameState.enemies = []
