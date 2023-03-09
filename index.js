@@ -1,15 +1,9 @@
 const gameState = {
-  t: 0,
-  keys: {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-  },
   features: {
     drawCenterRetical: 0,
     drawGameGrid: 0,
-    handleEnemyUpdate: 1,
+    handleSpawnEnemies: 1,
+    handleEnemyOutOfBounds: 1,
     createExplosion: 1,
     hyperTrails: 0,
   },
@@ -17,16 +11,16 @@ const gameState = {
 
 const gameCanvasId = 'gameCanvas'
 const canvas = document.getElementById(gameCanvasId)
-const ctx = canvas.getContext('2d')
+const canvasContext = canvas.getContext('2d')
 canvas.height = window.innerHeight
 canvas.width = window.innerWidth
 
 const drawBackground = () => {
   if (gameState.features.hyperTrails) return
-  ctx.save()
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.restore()
+  canvasContext.save()
+  canvasContext.fillStyle = "black";
+  canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+  canvasContext.restore()
 }
 
 const getGameSize = () => Math.max(canvas.width, canvas.height)
@@ -51,38 +45,38 @@ gameState.offset = getGameOffset()
 
 const drawCenterRetical = () => {
   if (!gameState.features.drawCenterRetical) return
-  ctx.save()
-  ctx.strokeStyle = 'red'
-  ctx.lineWidth = 3
-  ctx.beginPath()
-  ctx.moveTo(canvas.width / 2 - 10, canvas.heigh / 2)
-  ctx.lineTo(canvas.width/ 2 + 10, canvas.height / 2)
-  ctx.stroke()
-  ctx.moveTo(canvas.width / 2, canvas.height / 2 - 10)
-  ctx.lineTo(canvas.width / 2, canvas.height / 2 + 10)
-  ctx.stroke()
-  ctx.restore()
+  canvasContext.save()
+  canvasContext.strokeStyle = 'red'
+  canvasContext.lineWidth = 3
+  canvasContext.beginPath()
+  canvasContext.moveTo(canvas.width / 2 - 10, canvas.heigh / 2)
+  canvasContext.lineTo(canvas.width/ 2 + 10, canvas.height / 2)
+  canvasContext.stroke()
+  canvasContext.moveTo(canvas.width / 2, canvas.height / 2 - 10)
+  canvasContext.lineTo(canvas.width / 2, canvas.height / 2 + 10)
+  canvasContext.stroke()
+  canvasContext.restore()
 }
 
 const drawGameGrid = () => {
   if (!gameState.features.drawGameGrid) return
-  ctx.save()
-  ctx.strokeStyle = 'red'
-  ctx.lineWidth = 1
-  ctx.beginPath()
+  canvasContext.save()
+  canvasContext.strokeStyle = 'red'
+  canvasContext.lineWidth = 1
+  canvasContext.beginPath()
   // vertical grid lines
   for (let x = 0; x <= 10; x++) {
-    ctx.moveTo(gameState.size * x * 0.1 - gameState.offset.x, 0 - gameState.offset.y)
-    ctx.lineTo(gameState.size * x * 0.1 - gameState.offset.x, gameState.size)
-    ctx.stroke()
+    canvasContext.moveTo(gameState.size * x * 0.1 - gameState.offset.x, 0 - gameState.offset.y)
+    canvasContext.lineTo(gameState.size * x * 0.1 - gameState.offset.x, gameState.size)
+    canvasContext.stroke()
   }
   // horizontal grid lines
   for (let y = 0; y <= 10; y++) {
-    ctx.moveTo(0 - gameState.offset.x, gameState.size * y * 0.1 - gameState.offset.y)
-    ctx.lineTo(gameState.size, gameState.size * y * 0.1 - gameState.offset.y)
-    ctx.stroke()
+    canvasContext.moveTo(0 - gameState.offset.x, gameState.size * y * 0.1 - gameState.offset.y)
+    canvasContext.lineTo(gameState.size, gameState.size * y * 0.1 - gameState.offset.y)
+    canvasContext.stroke()
   }
-  ctx.restore()
+  canvasContext.restore()
 }
 
 const getScaledFont = (scalar = 1) => `${gameState.size * .02 * scalar}px sans-serif`
@@ -96,21 +90,8 @@ const incrementScore = () => !gameState.gameOver && gameState.score++
 const incrementTime = () => gameState.t++
 
 class StartMenu {
-  draw() {
-    ctx.save()
-    ctx.font = getScaledFont(2);
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'ideographic'
-    ctx.fillText(`Survivor Prototype`, canvas.width / 2, canvas.height / 2);
-    ctx.font = getScaledFont(1.5);
-    ctx.fillText(`Tap Enter to Start`, canvas.width / 2, canvas.height / 2 + spacer); 
-    ctx.font = getScaledFont(1);
-    ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (spacer * 2.2));
-    ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (spacer * 3));
-    ctx.restore()
-  }
   update() {
+    if (!gameState.preGame) return
     if (
       gameState.mouse
       && !gameState.mouse.clicking
@@ -119,44 +100,42 @@ class StartMenu {
       && .4 < gameState.mouse.y
       && gameState.mouse.y < .6
     ) newGame()
+  }
+  draw() {
+    if (!gameState.preGame) return
+    canvasContext.save()
+    canvasContext.font = getScaledFont(2);
+    canvasContext.fillStyle = 'white';
+    canvasContext.textAlign = 'center'
+    canvasContext.textBaseline = 'ideographic'
+    canvasContext.fillText(`Survivor Prototype`, canvas.width / 2, canvas.height / 2);
+    canvasContext.font = getScaledFont(1.5);
+    canvasContext.fillText(`Tap Enter to Start`, canvas.width / 2, canvas.height / 2 + spacer); 
+    canvasContext.font = getScaledFont(1);
+    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (spacer * 2.2));
+    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (spacer * 3));
+    canvasContext.restore()
   }
 }
 
 class InGameMenu {
   draw() {
+    if (gameState.gameOver) return
     const padding = spacer / 2
-    ctx.save()
-    ctx.font = getScaledFont();
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'start'
-    ctx.textBaseline = 'hanging'
-    ctx.fillText(`Score: ${gameState.score}`, padding, padding);
-    ctx.fillText(`Time: ${gameState.t}`, padding, padding + spacer);
-    ctx.restore()
+    canvasContext.save()
+    canvasContext.font = getScaledFont();
+    canvasContext.fillStyle = 'white';
+    canvasContext.textAlign = 'start'
+    canvasContext.textBaseline = 'hanging'
+    canvasContext.fillText(`Score: ${gameState.score}`, padding, padding);
+    canvasContext.fillText(`Time: ${gameState.t}`, padding, padding + spacer);
+    canvasContext.restore()
   }
 }
 
 class EndGameMenu {
-  draw() {
-    const spacer = getScaledFontPixelValue(2)
-    ctx.save()
-    ctx.font = getScaledFont(2);
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'ideographic'
-    ctx.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - spacer * 2);
-    ctx.font = getScaledFont(1.5);
-    ctx.fillText(`Score: ${gameState.score}`, canvas.width / 2, canvas.height / 2 - spacer); 
-    ctx.font = getScaledFont(1.5);
-    ctx.fillText(`Time: ${gameState.gameOverTime}`, canvas.width / 2, canvas.height / 2); 
-    ctx.font = getScaledFont(1.5);
-    ctx.fillText(`Tap Enter to Restart`, canvas.width / 2, canvas.height / 2 + spacer); 
-    ctx.font = getScaledFont(1);
-    ctx.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
-    ctx.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
-    ctx.restore()
-  }
   update() {
+    if (!gameState.gameOver || gameState.preGame) return
     if (
       gameState.mouse
       && !gameState.mouse.clicking
@@ -165,6 +144,26 @@ class EndGameMenu {
       && .4 < gameState.mouse.y
       && gameState.mouse.y < .6
     ) newGame()
+  }
+  draw() {
+    if (!gameState.gameOver || gameState.preGame) return
+    const spacer = getScaledFontPixelValue(2)
+    canvasContext.save()
+    canvasContext.font = getScaledFont(2);
+    canvasContext.fillStyle = 'white';
+    canvasContext.textAlign = 'center'
+    canvasContext.textBaseline = 'ideographic'
+    canvasContext.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - spacer * 2);
+    canvasContext.font = getScaledFont(1.5);
+    canvasContext.fillText(`Score: ${gameState.score}`, canvas.width / 2, canvas.height / 2 - spacer); 
+    canvasContext.font = getScaledFont(1.5);
+    canvasContext.fillText(`Time: ${gameState.gameOverTime}`, canvas.width / 2, canvas.height / 2); 
+    canvasContext.font = getScaledFont(1.5);
+    canvasContext.fillText(`Tap Enter to Restart`, canvas.width / 2, canvas.height / 2 + spacer); 
+    canvasContext.font = getScaledFont(1);
+    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
+    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
+    canvasContext.restore()
   }
 }
 
@@ -179,8 +178,20 @@ const getAngleBetweenPoints = (
   {x: x2, y: y2}
  ) => Math.atan2((y2 - y1), (x2 - x1))
 
+let idCounter = 0
+
+const findOwnIndexInArray = (entity, array) => array.findIndex((element) => element.id === entity.id)
+
+const removeSelfFromArray = (entity, array) => {
+  const selfIndex = findOwnIndexInArray(entity, array)
+  if (selfIndex >= 0) {
+    array.splice(selfIndex, 1)
+  }
+}
+
 class Entity {
   constructor(props = {}) {
+    this.id = ++idCounter
     this.x = props.x || .5
     this.y = props.y || .5
     this.speedX = props.speedX || 0
@@ -198,17 +209,17 @@ class Entity {
     const {x, y, text, textColor} = this
     const {offset, size: gameStateSize} = gameState
     if (text) {
-      ctx.save()
-      ctx.fillStyle = textColor;
-      ctx.font = getScaledFont(1)
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(
+      canvasContext.save()
+      canvasContext.fillStyle = textColor;
+      canvasContext.font = getScaledFont(1)
+      canvasContext.textAlign = 'center'
+      canvasContext.textBaseline = 'middle'
+      canvasContext.fillText(
         text,
         x * gameStateSize - offset.x,
         y * gameStateSize - offset.y
       )
-      ctx.restore()
+      canvasContext.restore()
     }
   }
 
@@ -223,6 +234,7 @@ class Entity {
     )
   }
 }
+
 class Ball extends Entity {
   constructor(props = {}) {
     super(props)
@@ -235,18 +247,18 @@ class Ball extends Entity {
   draw() {
     const {color, x, y, size, opacity} = this
     const {offset, size: gameStateSize} = gameState
-    ctx.save()
-    ctx.fillStyle = color
-    ctx.globalAlpha = opacity
-    ctx.beginPath()
-    ctx.arc(
+    canvasContext.save()
+    canvasContext.fillStyle = color
+    canvasContext.globalAlpha = opacity
+    canvasContext.beginPath()
+    canvasContext.arc(
       x * gameStateSize - offset.x,
       y * gameStateSize - offset.y,
       size *  gameStateSize,
       0,
       Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
+    canvasContext.fill()
+    canvasContext.restore()
     super.draw()
   }
 }
@@ -321,6 +333,29 @@ const setSpeedTowardsTarget = (ball1, ball2, speed) => {
   ball1.speedY = speed * Math.sin(angleToTarget)
 }
 
+const handleEnemyOutOfBounds = (enemy) => {
+  if (!gameState.features.handleEnemyOutOfBounds) return
+  if (enemy.x > 1.2 || enemy.x < -.2 || enemy.y > 1.2 || enemy.y < -.2) {
+    removeSelfFromArray(enemy, gameState.enemies)
+  }
+}
+
+const handleEnemyCollisions = (enemy) => {
+  const collisionWithPlayer = getCollisionDetected(enemy, gameState.player)
+  const collisionWithShield = gameState.shields.some(shield => getCollisionDetected(enemy, shield))
+  if (collisionWithPlayer || collisionWithShield) {
+    removeSelfFromArray(enemy, gameState.enemies)
+    if (collisionWithPlayer) {
+      createExplosion({x:collisionWithPlayer.x , y:collisionWithPlayer.y, size: enemy.size})
+      gameState.player.health -= 1
+    }
+    if (collisionWithShield) {
+      createExplosion({x:enemy.x , y:enemy.y, size: enemy.size,color: enemy.color})
+      incrementScore()
+    }
+  }
+}
+
 const setRandomLocationOnEdge = (ball) => {
   const random = Math.random()
   if (random < .25) {
@@ -341,9 +376,8 @@ const setRandomLocationOnEdge = (ball) => {
 class EnemyBall extends Ball {
   constructor() {
     super()
-    this.color = 'red'
+    this.color = 'darkred'
     this.size = 0.02
-
     setRandomLocationOnEdge(this)
     setSpeedTowardsTarget(this, gameState.player, .003)
   }
@@ -351,10 +385,10 @@ class EnemyBall extends Ball {
   update(){
     this.x += this.speedX
     this.y += this.speedY
-
     moveBasedOnKeyBoard(this)
     moveBasedOnMouse(this);
-    setSpeedTowardsTarget(this, gameState.player, getPythagorean(this.speedX, this.speedY))
+    handleEnemyOutOfBounds(this);
+    handleEnemyCollisions(this)
   }
 }
 
@@ -368,17 +402,14 @@ class SlowEnemyBall extends EnemyBall {
   }
 }
 
-class DumbEnemyBall extends EnemyBall {
+class SmartEnemyBall extends EnemyBall {
   constructor() {
     super()
-    this.color = 'darkred'
+    this.color = 'red'
   }
   update() {
-    this.x += this.speedX
-    this.y += this.speedY
-
-    moveBasedOnKeyBoard(this)
-    moveBasedOnMouse(this);
+    super.update()
+    setSpeedTowardsTarget(this, gameState.player, getPythagorean(this.speedX, this.speedY))
   }
 }
 
@@ -393,7 +424,15 @@ class Explosion extends Ball {
     super.update()
     this.size += 0.001
     this.opacity -= 0.1
+    if (this.opacity <= 0) {
+      removeSelfFromArray(this, gameState.explosions)
+    }
   }
+}
+
+const createExplosion = ({x, y, color, size} = {}) => {
+  if (!gameState.features.createExplosion) return
+  gameState.explosions.push(new Explosion({x, y, color, size}))
 }
 
 class Shield extends Ball {
@@ -413,11 +452,6 @@ class Shield extends Ball {
     this.x = .5 + (this.distanceFromCenter * Math.cos(this.angle))
     this.y = .5 + (this.distanceFromCenter * Math.sin(this.angle))
   }
-}
-
-const createExplosion = ({x, y, ...other}) => {
-  if (!gameState.features.createExplosion) return
-  gameState.explosions.push(new Explosion({x, y, ...other}))
 }
 
 const getDistanceBetweenBallCenters = (ball1, ball2) => 
@@ -444,38 +478,11 @@ const getCollisionDetected = (ball1, ball2) => {
   }
 }
 
-const handleShieldsUpdate = () => {
-  gameState.shields.forEach(shield => shield.update())
-}
-
-const handleEnemyUpdate = () => {
-  if (!gameState.features.handleEnemyUpdate) return
-
-  gameState.enemies.forEach((enemy, i) => {
-    enemy.update()
-    // delete out of bounds enemies
-    if (enemy.x > 1.2 || enemy.x < -.2 || enemy.y > 1.2 || enemy.y < -.2) {
-      gameState.enemies.splice(i, 1)
-      return
-    }
-    // collisions
-    const collisionWithPlayer = getCollisionDetected(enemy, gameState.player)
-    const collisionWithShield = gameState.shields.some(shield => getCollisionDetected(enemy, shield))
-    if (collisionWithPlayer || collisionWithShield) {
-      gameState.enemies.splice(i, 1)
-      if (collisionWithPlayer) {
-        createExplosion({x:collisionWithPlayer.x , y:collisionWithPlayer.y, size: enemy.size})
-        gameState.player.health -= 1
-      }
-      if (collisionWithShield) {
-        createExplosion({x:enemy.x , y:enemy.y, size: enemy.size,color: enemy.color})
-        incrementScore()
-      }
-    }
-  })
-  
+const handleSpawnEnemies = () => {
+  if (!gameState.features.handleSpawnEnemies) return
   if (gameState.t % 4 === 0 && gameState.enemies.length < 200) {
     const random = randomIntRange(1, 3)
+    const nEnemies = gameState.enemies.length
     switch (random) {
       case 1:
         gameState.enemies.push(new EnemyBall())
@@ -484,77 +491,36 @@ const handleEnemyUpdate = () => {
         gameState.enemies.push(new SlowEnemyBall())
         break
       case 3:
-        gameState.enemies.push(new DumbEnemyBall())
+        gameState.enemies.push(new SmartEnemyBall())
         break
     }
   }
 }
 
-const handleExplosionUpdate = () => {
-  gameState.explosions.forEach((explosion, i) => {
-    explosion.update()
-    if (explosion.opacity <= 0) {
-      gameState.explosions.splice(i, 1)
-    }
-  })
-}
-
-const handleMenuUpdate = () => {
-  const {
-    startMenu,
-    endGameMenu
-  } = gameState
-  if (startMenu) startMenu.update()
-  if (endGameMenu) endGameMenu.update()
-}
-
 const update = () => {
-  gameState.player.update()
-  handleShieldsUpdate()
-  handleEnemyUpdate()
-  handleExplosionUpdate()
-  handleMenuUpdate()
-}
-
-const drawShields = () => {
-  gameState.shields.forEach(shield => shield.draw())
-}
-
-const drawEnemies = () => {
-  for (enemy of gameState.enemies) {
-    enemy.draw()
-  }
-}
-
-const drawExplosions = () => {
-  for (explosion of gameState.explosions) {
-    explosion.draw()
-  }
-}
-
-const drawInGameMenu = () => {
-  if (gameState.inGameMenu) gameState.inGameMenu.draw()
-}
-
-const drawStartMenu = () => {
-  if (gameState.startMenu) gameState.startMenu.draw()
-}
-
-const drawEndGameMenu = () => {
-  if (gameState.endGameMenu) gameState.endGameMenu.draw()
+  ;([
+    gameState.player,
+    ...gameState.shields,
+    ...gameState.enemies,
+    ...gameState.explosions,
+    gameState.inGameMenu,
+    gameState.startMenu,
+    gameState.endGameMenu,
+  ]).forEach(entity => entity && entity.update && entity.update())
+  handleSpawnEnemies()
 }
  
 const draw = () => {
   drawBackground()
-  gameState.player.draw()
-  drawShields()
-  drawEnemies()
-  drawExplosions()
-  drawCenterRetical()
-  drawGameGrid()
-  drawInGameMenu()
-  drawStartMenu()
-  drawEndGameMenu()
+  ;([
+    gameState.player,
+    ...gameState.shields,
+    ...gameState.enemies,
+    ...gameState.explosions,
+    gameState.inGameMenu,
+    gameState.startMenu,
+    gameState.endGameMenu,
+  ]).forEach(entity => entity && entity.draw && entity.draw())
 }
 
 window.addEventListener('resize', () => {
@@ -652,14 +618,12 @@ const newGame = () => {
   gameState.shields = [ new Shield() ]
   gameState.enemies = []
   gameState.explosions = []
+  gameState.preGame = false
   gameState.gameOver = false
   gameState.score = 0
   gameState.t = 0
   gameState.keys = false
   gameState.mouse = false
-  gameState.startMenu = false
-  gameState.endGameMenu = false
-  gameState.inGameMenu = new InGameMenu()
 }
 
 const getIsGameOver = () => gameState.player.health <= 0
@@ -671,8 +635,6 @@ gameOver = () => {
   gameState.mouse = false
   gameState.player.mouse = false
   gameState.pause = false
-  gameState.inGameMenu = false
-  gameState.endGameMenu = new EndGameMenu()
 }
 
 const playGame = () => {
@@ -680,10 +642,10 @@ const playGame = () => {
     gameOver()
   }
   if (gameState.features.hyperTrails) {
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
+    canvasContext.fillStyle = 'rgba(0,0,0,0.1)';
+    canvasContext.fillRect(0,0,canvas.width,canvas.height);
   } else {
-    ctx.clearRect(0,0, canvas.width, canvas.height)
+    canvasContext.clearRect(0,0, canvas.width, canvas.height)
   }
   update()
   draw()
@@ -701,6 +663,7 @@ const runGame = () => {
 }
 
 const init = () => {
+  gameState.t = 0
   gameState.gameOver = true
   gameState.preGame = true
   gameState.player = new AIPlayerBall()
@@ -709,6 +672,8 @@ const init = () => {
   gameState.explosions = []
   gameState.size = getGameSize()
   gameState.startMenu = new StartMenu()
+  gameState.inGameMenu = new InGameMenu()
+  gameState.endGameMenu = new EndGameMenu()
   runGame()
 }
 
