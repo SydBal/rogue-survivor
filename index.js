@@ -169,8 +169,6 @@ class EndGameMenu extends Menu {
   }
 }
 
-const togglePause = () => pause = !pause
-
 const randomIntRange = (min = 1, max = 100) =>  Math.floor(Math.random() * (max + 1 - min) + min)
 
 const getPythagorean = (a, b) => Math.sqrt(a * a + b * b)
@@ -340,7 +338,7 @@ const moveBasedOnKeyBoard = (entity) => {
 
 const moveBasedOnMouse = (ball) => {
   if (
-    lastUsedController === mouseController
+    lastUsedController instanceof MouseController
     && player.playerControlledDirection
   ) {
     const distanceToPlayer = getDistanceBetweenEntityCenters(player.playerControlledDirection, player)
@@ -561,6 +559,8 @@ window.addEventListener('resize', () => {
   draw()
 })
 
+const togglePause = () => pause = !pause
+
 class KeysController {}
 
 document.addEventListener('keydown', (event) => {
@@ -625,21 +625,17 @@ class MouseController {}
 document.addEventListener('mousedown', (event) => {
   if (!mouseController) mouseController = new MouseController()
   if (!isGameOver) lastUsedController = mouseController
-  mouseController = {
-    clicking: true,
-    x: event.pageX / canvas.width,
-    y: event.pageY / canvas.height
-  }
+  mouseController.clicking = true
+  mouseController.x = event.pageX / canvas.width
+  mouseController.y = event.pageY / canvas.height
 });
 
 document.addEventListener('mouseup', (event) => {
   if (!mouseController) mouseController = new MouseController()
   if (!isGameOver) lastUsedController = mouseController
-  mouseController = {
-    clicking: false,
-    x: event.pageX / canvas.width,
-    y: event.pageY / canvas.height
-  }
+  mouseController.clicking = false
+  mouseController.x = event.pageX / canvas.width
+  mouseController.y = event.pageY / canvas.height
 });
 
 document.addEventListener('mousemove', (event) => {
