@@ -1,5 +1,3 @@
-const gameState = {}
-
 const features = {
   drawCenterRetical: 0,
   drawGameGrid: 0,
@@ -87,23 +85,24 @@ const incrementScore = () => !isGameOver && score++
 const incrementTime = () => gameTime++
 
 class Menu {
-  spacer = getScaledFontPixelValue(2)
+  getSpacer = () => getScaledFontPixelValue(2)
 }
 
 class StartMenu extends Menu {
   update() {
     if (!preGame) return
     if (
-      gameState.mouse
-      && !gameState.mouse.clicking
-      && .4 < gameState.mouse.x
-      && gameState.mouse.x < .6
-      && .4 < gameState.mouse.y
-      && gameState.mouse.y < .6
+      mouseController
+      && !mouseController.clicking
+      && .4 < mouseController.x
+      && mouseController.x < .6
+      && .4 < mouseController.y
+      && mouseController.y < .6
     ) newGame()
   }
   draw() {
     if (!preGame) return
+    const spacer = this.getSpacer()
     canvasContext.save()
     canvasContext.font = getScaledFont(2);
     canvasContext.fillStyle = 'white';
@@ -111,10 +110,10 @@ class StartMenu extends Menu {
     canvasContext.textBaseline = 'ideographic'
     canvasContext.fillText(`Survivor Prototype`, canvas.width / 2, canvas.height / 2);
     canvasContext.font = getScaledFont(1.5);
-    canvasContext.fillText(`Tap Enter to Start`, canvas.width / 2, canvas.height / 2 + this.spacer); 
+    canvasContext.fillText(`Tap Enter to Start`, canvas.width / 2, canvas.height / 2 + spacer); 
     canvasContext.font = getScaledFont(1);
-    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (this.spacer * 2.2));
-    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (this.spacer * 3));
+    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + (spacer * 2.2));
+    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + (spacer * 3));
     canvasContext.restore()
   }
 }
@@ -122,15 +121,16 @@ class StartMenu extends Menu {
 class InGameMenu extends Menu {
   draw() {
     if (isGameOver) return
-    const padding = this.spacer / 2
+    const spacer = this.getSpacer()
+    const padding = spacer / 2
     canvasContext.save()
     canvasContext.font = getScaledFont();
     canvasContext.fillStyle = 'white';
     canvasContext.textAlign = 'start'
     canvasContext.textBaseline = 'hanging'
     canvasContext.fillText(`Level ${level}`, padding, padding);
-    canvasContext.fillText(`Score: ${score}`, padding, padding + this.spacer);
-    canvasContext.fillText(`Time: ${gameTime}`, padding, padding + this.spacer * 2);
+    canvasContext.fillText(`Score: ${score}`, padding, padding + spacer);
+    canvasContext.fillText(`Time: ${gameTime}`, padding, padding + spacer * 2);
     canvasContext.restore()
   }
 }
@@ -139,36 +139,37 @@ class EndGameMenu extends Menu {
   update() {
     if (!isGameOver || preGame) return
     if (
-      gameState.mouse
-      && !gameState.mouse.clicking
-      && .4 < gameState.mouse.x
-      && gameState.mouse.x < .6
-      && .4 < gameState.mouse.y
-      && gameState.mouse.y < .6
+      mouseController
+      && !mouseController.clicking
+      && .4 < mouseController.x
+      && mouseController.x < .6
+      && .4 < mouseController.y
+      && mouseController.y < .6
     ) newGame()
   }
   draw() {
     if (!isGameOver || preGame) return
+    const spacer = this.getSpacer()
     canvasContext.save()
     canvasContext.font = getScaledFont(2);
     canvasContext.fillStyle = 'white';
     canvasContext.textAlign = 'center'
     canvasContext.textBaseline = 'ideographic'
-    canvasContext.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - this.spacer * 2);
+    canvasContext.fillText(`Game Over`, canvas.width / 2, canvas.height / 2 - spacer * 2);
     canvasContext.font = getScaledFont(1.5);
-    canvasContext.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 - this.spacer); 
+    canvasContext.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 - spacer); 
     canvasContext.font = getScaledFont(1.5);
     canvasContext.fillText(`Time: ${gameOverTime}`, canvas.width / 2, canvas.height / 2); 
     canvasContext.font = getScaledFont(1.5);
-    canvasContext.fillText(`Tap Enter to Restart`, canvas.width / 2, canvas.height / 2 + this.spacer); 
+    canvasContext.fillText(`Tap Enter to Restart`, canvas.width / 2, canvas.height / 2 + spacer); 
     canvasContext.font = getScaledFont(1);
-    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + this.spacer * 2.2);
-    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + this.spacer * 3);
+    canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
+    canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
     canvasContext.restore()
   }
 }
 
-const togglePause = () => gameState.pause = !gameState.pause
+const togglePause = () => pause = !pause
 
 const randomIntRange = (min = 1, max = 100) =>  Math.floor(Math.random() * (max + 1 - min) + min)
 
@@ -177,9 +178,7 @@ const getPythagorean = (a, b) => Math.sqrt(a * a + b * b)
 const getAngleBetweenPoints = (
   {x: x1, y: y1},
   {x: x2, y: y2}
- ) => Math.atan2((y2 - y1), (x2 - x1))
-
-
+) => Math.atan2((y2 - y1), (x2 - x1))
 
 const findOwnIndexInArray = (entity, array) => array.findIndex((element) => element.id === entity.id)
 
@@ -288,7 +287,7 @@ class PlayerBall extends Ball {
     this.speed = 0.005
   }
   update() {
-    if (!isGameOver) this.playerControlledDirection = gameState[gameState.lastUsedController]
+    if (!isGameOver) this.playerControlledDirection = lastUsedController
     this.text = this.health
     if (isGameOver) {
       this.size = 0
@@ -314,7 +313,8 @@ const getClosestEnemy = () => {
 class AIPlayerBall extends PlayerBall {
   constructor(props = {}){
     super(props)
-    gameState.lastUsedController = 'mouse'
+    mouseController = new MouseController()
+    lastUsedController = mouseController
   }
   update() {
     super.update()
@@ -322,27 +322,25 @@ class AIPlayerBall extends PlayerBall {
     const closestEnemy = getClosestEnemy()
     if (!closestEnemy) return;
     const angleAwayFromEnemy = getAngleBetweenPoints(player, closestEnemy) + Math.PI;
-    this.playerControlledDirection = {
-      clicked: true,
-      x: Math.cos(angleAwayFromEnemy),
-      y: Math.sin(angleAwayFromEnemy)
-    }
+    if (!this.playerControlledDirection) this.playerControlledDirection = new MouseController()
+    this.playerControlledDirection.clicked = true,
+    this.playerControlledDirection.x = Math.cos(angleAwayFromEnemy)
+    this.playerControlledDirection.y = Math.sin(angleAwayFromEnemy)
   }
 }
 
-const moveBasedOnKeyBoard = (ball) => {
+const moveBasedOnKeyBoard = (entity) => {
   if (
-    gameState.lastUsedController === 'keys'
-    && gameState.keys
+    lastUsedController instanceof KeysController
   ) {
-    ball.x += (gameState.keys.right ? -player.speed : 0) + (gameState.keys.left ? player.speed : 0)
-    ball.y += (gameState.keys.down ? -player.speed : 0) + (gameState.keys.up ? player.speed : 0)
+    entity.x += (keysController.right ? -player.speed : 0) + (keysController.left ? player.speed : 0)
+    entity.y += (keysController.down ? -player.speed : 0) + (keysController.up ? player.speed : 0)
   }
 }
 
 const moveBasedOnMouse = (ball) => {
   if (
-    gameState.lastUsedController === 'mouse'
+    lastUsedController === mouseController
     && player.playerControlledDirection
   ) {
     const distanceToPlayer = getDistanceBetweenEntityCenters(player.playerControlledDirection, player)
@@ -563,29 +561,31 @@ window.addEventListener('resize', () => {
   draw()
 })
 
+class KeysController {}
+
 document.addEventListener('keydown', (event) => {
-  if (!isGameOver) gameState.lastUsedController = 'keys'
-  if (!gameState.keys) gameState.keys = {}
+  if (!keysController) keysController = new KeysController()
+  if (!isGameOver) lastUsedController = keysController
   switch (event.key) {
     case "ArrowUp":
     case "w":
       if (isGameOver) break;
-      gameState.keys.up = true
+      keysController.up = true
       break
     case "ArrowDown":
     case "s":
       if (isGameOver) break;
-      gameState.keys.down = true
+      keysController.down = true
       break
     case "ArrowRight":
     case "d":
       if (isGameOver) break;
-      gameState.keys.right = true
+      keysController.right = true
       break
     case "ArrowLeft":
     case "a":
       if (isGameOver) break;
-      gameState.keys.left = true
+      keysController.left = true
       break
     case "Escape":
       if (isGameOver) break;
@@ -598,30 +598,34 @@ document.addEventListener('keydown', (event) => {
 })
 
 document.addEventListener('keyup', (event) => {
-  if (!isGameOver) gameState.lastUsedController = 'keys'
+  if (!keysController) keysController = new KeysController()
+  if (!isGameOver) lastUsedController = keysController
   switch (event.key) {
     case "ArrowUp":
     case "w":
-      gameState.keys.up = false
+      keysController.up = false
       break;
     case "ArrowDown":
     case "s":
-      gameState.keys.down = false
+      keysController.down = false
       break;
     case "ArrowRight":
     case "d":
-      gameState.keys.right = false
+      keysController.right = false
       break;
     case "ArrowLeft":
     case "a":
-      gameState.keys.left = false
+      keysController.left = false
       break;
   }
 })
 
+class MouseController {}
+
 document.addEventListener('mousedown', (event) => {
-  if (!isGameOver) gameState.lastUsedController = 'mouse'
-  gameState.mouse = {
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver) lastUsedController = mouseController
+  mouseController = {
     clicking: true,
     x: event.pageX / canvas.width,
     y: event.pageY / canvas.height
@@ -629,8 +633,9 @@ document.addEventListener('mousedown', (event) => {
 });
 
 document.addEventListener('mouseup', (event) => {
-  if (!isGameOver) gameState.lastUsedController = 'mouse'
-  gameState.mouse = {
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver) lastUsedController = mouseController
+  mouseController = {
     clicking: false,
     x: event.pageX / canvas.width,
     y: event.pageY / canvas.height
@@ -638,9 +643,11 @@ document.addEventListener('mouseup', (event) => {
 });
 
 document.addEventListener('mousemove', (event) => {
-  if (gameState.mouse && gameState.mouse.clicking) {
-    gameState.mouse.x = event.pageX / canvas.width,
-    gameState.mouse.y = event.pageY / canvas.height
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver && mouseController.clicking) lastUsedController = mouseController
+  if (mouseController && mouseController.clicking) {
+    mouseController.x = event.pageX / canvas.width,
+    mouseController.y = event.pageY / canvas.height
   }
 });
 
@@ -654,7 +661,7 @@ const newGame = () => {
   score = 0
   gameTime = 0
   level = 1
-  gameState.lastUsedController = undefined
+  lastUsedController = false
 }
 
 const checkIsGameOver = () => player.health <= 0
@@ -662,9 +669,9 @@ const checkIsGameOver = () => player.health <= 0
 gameOver = () => {
   isGameOver = true
   gameOverTime = gameTime
-  gameState.lastUsedController = undefined
+  lastUsedController = false
   player.playerControlledDirection = false
-  gameState.pause = false
+  pause = false
 }
 
 const playGame = () => {
@@ -677,9 +684,7 @@ const playGame = () => {
   } else {
     canvasContext.clearRect(0,0, canvas.width, canvas.height)
   }
-  if (gameState.pause) {
-
-  } else {
+  if (!pause) {
     update()
   }
   draw()
@@ -690,6 +695,10 @@ const init = () => {
   idCounter = 0
   gameSize = getGameSize()
   gameOffset = getGameOffset()
+  pause = false
+  lastUsedController = false
+  mouseController = false
+  keysController = false
   gameTime = 0
   isGameOver = true
   preGame = true
