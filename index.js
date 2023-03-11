@@ -86,6 +86,35 @@ const incrementTime = () => gameTime++
 
 class Menu {
   getSpacer = () => getScaledFontPixelValue(2)
+  
+  drawBackground() {
+    canvasContext.save()
+    canvasContext.fillStyle = 'black'
+    canvasContext.globalAlpha = .3
+    canvasContext.beginPath()
+    canvasContext.arc(
+      .5 * gameSize - gameOffset.x,
+      .5 * gameSize - gameOffset.y,
+      .15 *  gameSize,
+      0,
+      Math.PI * 2)
+    canvasContext.fill()
+    canvasContext.arc(
+      .5 * gameSize - gameOffset.x,
+      .5 * gameSize - gameOffset.y,
+      .3 *  gameSize,
+      0,
+      Math.PI * 2)
+    canvasContext.fill()
+    canvasContext.arc(
+      .5 * gameSize - gameOffset.x,
+      .5 * gameSize - gameOffset.y,
+      .45 *  gameSize,
+      0,
+      Math.PI * 2)
+    canvasContext.fill()
+    canvasContext.restore()
+  }
 }
 
 class StartMenu extends Menu {
@@ -102,6 +131,7 @@ class StartMenu extends Menu {
   }
   draw() {
     if (!preGame) return
+    this.drawBackground()
     const spacer = this.getSpacer()
     canvasContext.save()
     canvasContext.font = getScaledFont(2);
@@ -149,6 +179,7 @@ class EndGameMenu extends Menu {
   }
   draw() {
     if (!isGameOver || preGame) return
+    this.drawBackground()
     const spacer = this.getSpacer()
     canvasContext.save()
     canvasContext.font = getScaledFont(2);
@@ -166,6 +197,18 @@ class EndGameMenu extends Menu {
     canvasContext.fillText(`Controls: Arrow Keys, WASD,`, canvas.width / 2, canvas.height / 2 + spacer * 2.2);
     canvasContext.fillText(`Tap, or Click and Drag`, canvas.width / 2, canvas.height / 2 + spacer * 3);
     canvasContext.restore()
+  }
+}
+
+class PauseMenu extends Menu {
+  draw() {
+    if (!pause) return
+    this.drawBackground()
+    canvasContext.fillStyle = 'white';
+    canvasContext.font = getScaledFont(1.5);
+    canvasContext.textAlign = 'center'
+    canvasContext.textBaseline = 'middle'
+    canvasContext.fillText(`Paused`, canvas.width / 2, canvas.height / 2);
   }
 }
 
@@ -197,6 +240,7 @@ class Entity {
     this.speedY = props.speedY || 0
     this.text = props.text
     this.textColor = props.textColor || 'black'
+    this.textScale = props.textScale || 1
   }
 
   update() {
@@ -205,11 +249,11 @@ class Entity {
   }
 
   draw() {
-    const {x, y, speedX, speedY, text, textColor} = this
+    const {x, y, speedX, speedY, text, textColor, textScale} = this
     if (text) {
       canvasContext.save()
       canvasContext.fillStyle = textColor;
-      canvasContext.font = getScaledFont(1)
+      canvasContext.font = getScaledFont(textScale)
       canvasContext.textAlign = 'center'
       canvasContext.textBaseline = 'middle'
       canvasContext.fillText(
@@ -529,9 +573,7 @@ const update = () => {
     ...shields,
     ...enemies,
     ...explosions,
-    inGameMenu,
-    startMenu,
-    endGameMenu,
+    ...menus,
   ]).forEach(entity => entity && entity.update && entity.update())
   handleSpawnEnemies()
   incrementTime()
@@ -544,9 +586,7 @@ const draw = () => {
     ...shields,
     ...enemies,
     ...explosions,
-    inGameMenu,
-    startMenu,
-    endGameMenu,
+    ...menus,
   ]).forEach(entity => entity && entity.draw && entity.draw())
 }
 
@@ -565,26 +605,29 @@ class KeysController {}
 
 document.addEventListener('keydown', (event) => {
   if (!keysController) keysController = new KeysController()
-  if (!isGameOver) lastUsedController = keysController
   switch (event.key) {
     case "ArrowUp":
     case "w":
       if (isGameOver) break;
+      lastUsedController = keysController
       keysController.up = true
       break
     case "ArrowDown":
     case "s":
       if (isGameOver) break;
+      lastUsedController = keysController
       keysController.down = true
       break
     case "ArrowRight":
     case "d":
       if (isGameOver) break;
+      lastUsedController = keysController
       keysController.right = true
       break
     case "ArrowLeft":
     case "a":
       if (isGameOver) break;
+      lastUsedController = keysController
       keysController.left = true
       break
     case "Escape":
@@ -599,22 +642,29 @@ document.addEventListener('keydown', (event) => {
 
 document.addEventListener('keyup', (event) => {
   if (!keysController) keysController = new KeysController()
-  if (!isGameOver) lastUsedController = keysController
   switch (event.key) {
     case "ArrowUp":
     case "w":
+      if (isGameOver) break;
+      lastUsedController = keysController
       keysController.up = false
       break;
     case "ArrowDown":
     case "s":
+      if (isGameOver) break;
+      lastUsedController = keysController
       keysController.down = false
       break;
     case "ArrowRight":
     case "d":
+      if (isGameOver) break;
+      lastUsedController = keysController
       keysController.right = false
       break;
     case "ArrowLeft":
     case "a":
+      if (isGameOver) break;
+      lastUsedController = keysController
       keysController.left = false
       break;
   }
@@ -703,9 +753,12 @@ const init = () => {
   shields = []
   enemies = []
   explosions = []
-  startMenu = new StartMenu()
-  inGameMenu = new InGameMenu()
-  endGameMenu = new EndGameMenu()
+  menus = [
+    new StartMenu(),
+    new InGameMenu(),
+    new EndGameMenu(),
+    new PauseMenu(),
+  ]
   playGame()
 }
 
