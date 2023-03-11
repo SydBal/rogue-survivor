@@ -136,7 +136,7 @@ class StartMenu extends Menu {
     if (!preGame) return
     if (
       mouseController
-      && !mouseController.clicking
+      && mouseController.clicking
       && .4 < mouseController.x
       && mouseController.x < .6
       && .4 < mouseController.y
@@ -184,7 +184,7 @@ class EndGameMenu extends Menu {
     if (!isGameOver || preGame) return
     if (
       mouseController
-      && !mouseController.clicking
+      && mouseController.clicking
       && .4 < mouseController.x
       && mouseController.x < .6
       && .4 < mouseController.y
@@ -248,8 +248,8 @@ class Entity {
   constructor(props = {}) {
     this.id = ++idCounter
     this.createdDate = new Date()
-    this.x = props.x || .5
-    this.y = props.y || .5
+    this.x = props.x !== undefined ? props.x : .5
+    this.y = props.y !== undefined ? props.y : .5
     this.speedX = props.speedX || 0
     this.speedY = props.speedY || 0
     this.text = props.text
@@ -557,8 +557,8 @@ class EnemyBall extends Ball {
     super(props)
     this.color = 'darkred'
     this.size = 0.02
-    setRandomLocationOnEdge(this)
-    setSpeedTowardsTarget(this, player, .003)
+    if (props.x === undefined && props.y === undefined) setRandomLocationOnEdge(this)
+    if (props.speedX === undefined  && props.speedY === undefined) setSpeedTowardsTarget(this, player, .003)
   }
 
   update(){
@@ -569,6 +569,42 @@ class EnemyBall extends Ball {
     handleEnemyOutOfBounds(this);
     handleEnemyCollisions(this)
   }
+}
+
+const spawnEnemyWave = (EnemyType = EnemyBall, nEnemies = 5, angle, enemyProps) => {
+  const originEnemy = new EnemyType({...enemyProps})
+  const wave = [originEnemy]
+  for (let i = 0; i < nEnemies - 1; i++) {
+    const odd = i % 2
+    wave.push(new EnemyType({
+      x: originEnemy.x
+        + (originEnemy.size * 2 * (
+          angle
+            ? Math.cos(angle)
+            : Math.cos(
+              getAngleBetweenPoints(originEnemy, player)
+              + (Math.PI / 2)
+            )
+        ) * (odd ? -1 : 1) * (Math.floor(i / 2) + 1)
+      ),
+      y: originEnemy.y
+        + (originEnemy.size * 2 * (
+          angle
+            ? Math.sin(angle)
+            : Math.sin(
+              getAngleBetweenPoints(originEnemy, player)
+              + (Math.PI / 2)
+            )
+        ) * (odd ? -1 : 1) * (Math.floor(i / 2) + 1)
+      ),
+      speedX: originEnemy.speedX,
+      speedY: originEnemy.speedY,
+      ...enemyProps
+    }))
+  }
+  wave.forEach(enemy => enemies.push(enemy))
+  // console.log(wave)
+  // debugger
 }
 
 class SmartEnemyBall extends EnemyBall {
@@ -648,7 +684,6 @@ const getDistanceBetweenEntityCenters = (entity1, entity2) =>
 
 const getBallCollisionDetected = (ball1, ball2) => {
   const distanceBetweenBallCenters = getDistanceBetweenEntityCenters(ball1, ball2)
-
   if (distanceBetweenBallCenters < ball1.size + ball2.size) {
     return {
       x: ball1.x + (ball2.x - ball1.x) * (ball1.size / distanceBetweenBallCenters),
@@ -663,7 +698,22 @@ const handleLevel = () => {
 
 const handleSpawnEnemies = () => {
   if (!features.handleSpawnEnemies) return
-  if (gameTime % (11 - Math.min(10, level)) === 0 && enemies.length < 200) {
+  if (level === 1) {
+    if ((gameTime % 5) === 0 && enemies.length < 200) {
+      enemies.push(new EnemyBall())
+    }
+  }
+  if (level === 2) {
+    if ((gameTime % 7) === 0 && enemies.length < 200) {
+      spawnEnemyWave(EnemyBall, 3)
+    }
+  }
+  if (level === 3) {
+    if ((gameTime % 5) === 0 && enemies.length < 200) {
+      spawnEnemyWave(EnemyBall, 5)
+    }
+  }
+  if (level > 3 &&gameTime % (11 - Math.min(10, level)) === 0 && enemies.length < 200) {
     const random = randomIntRange(1, 3)
     switch (random) {
       case 1:
@@ -696,8 +746,8 @@ const draw = () => {
   drawBackground()
   ;([
     player,
-    ...shields,
     ...enemies,
+    ...shields,
     ...explosions,
     ...menus,
   ]).forEach(entity => entity && entity.draw && entity.draw())
@@ -716,6 +766,7 @@ const togglePause = () => pause = !pause
 
 const newGame = () => {
   player = new PlayerBall()
+  mouseController = false
   shields = [ new Shield() ]
   enemies = []
   explosions = []
@@ -732,6 +783,7 @@ gameOver = () => {
   isGameOver = true
   gameOverTime = gameTime
   player.controller = false
+  mouseController = false
   pause = false
 }
 
