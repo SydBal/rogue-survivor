@@ -329,7 +329,6 @@ class PlayerBall extends Ball {
     this.speed = 0.005
   }
   update() {
-    if (!isGameOver) this.playerControlledDirection = lastUsedController
     this.text = this.health
     if (isGameOver) {
       this.size = 0
@@ -355,8 +354,9 @@ const getClosestEnemy = () => {
 class AIPlayerBall extends PlayerBall {
   constructor(props = {}){
     super(props)
-    mouseController = new MouseController()
-    lastUsedController = mouseController
+    this.controller = new MouseController()
+    this.controller.x = .5
+    this.controller.y = .5
   }
   update() {
     super.update()
@@ -364,16 +364,15 @@ class AIPlayerBall extends PlayerBall {
     const closestEnemy = getClosestEnemy()
     if (!closestEnemy) return;
     const angleAwayFromEnemy = getAngleBetweenPoints(player, closestEnemy) + Math.PI;
-    if (!this.playerControlledDirection) this.playerControlledDirection = new MouseController()
-    this.playerControlledDirection.clicked = true,
-    this.playerControlledDirection.x = Math.cos(angleAwayFromEnemy)
-    this.playerControlledDirection.y = Math.sin(angleAwayFromEnemy)
+    this.controller.clicked = true,
+    this.controller.x = Math.cos(angleAwayFromEnemy)
+    this.controller.y = Math.sin(angleAwayFromEnemy)
   }
 }
 
 const moveBasedOnKeyBoard = (entity) => {
   if (
-    lastUsedController instanceof KeysController
+    player.controller instanceof KeysController
   ) {
     entity.x += (keysController.right ? -player.speed : 0) + (keysController.left ? player.speed : 0)
     entity.y += (keysController.down ? -player.speed : 0) + (keysController.up ? player.speed : 0)
@@ -382,12 +381,11 @@ const moveBasedOnKeyBoard = (entity) => {
 
 const moveBasedOnMouse = (ball) => {
   if (
-    lastUsedController instanceof MouseController
-    && player.playerControlledDirection
+    player.controller instanceof MouseController
   ) {
-    const distanceToPlayer = getDistanceBetweenEntityCenters(player.playerControlledDirection, player)
+    const distanceToPlayer = getDistanceBetweenEntityCenters(player.controller, player)
     if (distanceToPlayer <= player.size) return
-    const angleToMouse = getAngleBetweenPoints(player, player.playerControlledDirection)
+    const angleToMouse = getAngleBetweenPoints(player, player.controller)
     ball.x -= player.speed * Math.cos(angleToMouse)
     ball.y -= player.speed * Math.sin(angleToMouse)
   }
@@ -609,25 +607,25 @@ document.addEventListener('keydown', (event) => {
     case "ArrowUp":
     case "w":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.up = true
       break
     case "ArrowDown":
     case "s":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.down = true
       break
     case "ArrowRight":
     case "d":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.right = true
       break
     case "ArrowLeft":
     case "a":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.left = true
       break
     case "Escape":
@@ -646,25 +644,25 @@ document.addEventListener('keyup', (event) => {
     case "ArrowUp":
     case "w":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.up = false
       break;
     case "ArrowDown":
     case "s":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.down = false
       break;
     case "ArrowRight":
     case "d":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.right = false
       break;
     case "ArrowLeft":
     case "a":
       if (isGameOver) break;
-      lastUsedController = keysController
+      player.controller = keysController
       keysController.left = false
       break;
   }
@@ -674,7 +672,7 @@ class MouseController {}
 
 document.addEventListener('mousedown', (event) => {
   if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver) lastUsedController = mouseController
+  if (!isGameOver) player.controller = mouseController
   mouseController.clicking = true
   mouseController.x = event.pageX / canvas.width
   mouseController.y = event.pageY / canvas.height
@@ -682,7 +680,7 @@ document.addEventListener('mousedown', (event) => {
 
 document.addEventListener('mouseup', (event) => {
   if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver) lastUsedController = mouseController
+  if (!isGameOver) player.controller = mouseController
   mouseController.clicking = false
   mouseController.x = event.pageX / canvas.width
   mouseController.y = event.pageY / canvas.height
@@ -690,8 +688,8 @@ document.addEventListener('mouseup', (event) => {
 
 document.addEventListener('mousemove', (event) => {
   if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver && mouseController.clicking) lastUsedController = mouseController
-  if (mouseController && mouseController.clicking) {
+  if (!isGameOver && mouseController.clicking) player.controller = mouseController
+  if (mouseController.clicking) {
     mouseController.x = event.pageX / canvas.width,
     mouseController.y = event.pageY / canvas.height
   }
@@ -707,7 +705,6 @@ const newGame = () => {
   score = 0
   gameTime = 0
   level = 1
-  lastUsedController = false
 }
 
 const checkIsGameOver = () => player.health <= 0
@@ -715,8 +712,7 @@ const checkIsGameOver = () => player.health <= 0
 gameOver = () => {
   isGameOver = true
   gameOverTime = gameTime
-  lastUsedController = false
-  player.playerControlledDirection = false
+  player.controller = false
   pause = false
 }
 
@@ -742,7 +738,6 @@ const init = () => {
   gameSize = getGameSize()
   gameOffset = getGameOffset()
   pause = false
-  lastUsedController = false
   mouseController = false
   keysController = false
   gameTime = 0
