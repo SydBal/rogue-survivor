@@ -1,11 +1,14 @@
 const features = {
+  hyperTrails: 0,
+  zoomOut: 0,
   drawCenterRetical: 0,
   drawGameGrid: 0,
   drawEntityVelocityVector: 0,
   handleSpawnEnemies: 1,
   handleEnemyOutOfBounds: 1,
   createExplosion: 1,
-  hyperTrails: 0,
+  keysControl: 1,
+  mouseControl: 1,
 }
 
 const gameCanvasId = 'gameCanvas'
@@ -22,16 +25,27 @@ const drawBackground = () => {
   canvasContext.restore()
 }
 
-const getGameSize = () => Math.max(canvas.width, canvas.height)
+const getGameSize = () =>
+  features.zoomOut
+    ? Math.min(canvas.width, canvas.height)
+    : Math.max(canvas.width, canvas.height)
 
 const getGameOffset = () => {
-  if (canvas.width > canvas.height) {
+  if (
+    features.zoomOut
+      ? canvas.width < canvas.height
+      : canvas.width > canvas.height
+  ) {
     return {
       x: 0,
       y: (gameSize - canvas.height) / 2
     }
   }
-  if (canvas.width < canvas.height) {
+  if (
+    features.zoomOut
+     ? canvas.width > canvas.height
+     : canvas.width < canvas.height
+  ) {
     return {
       x: (gameSize - canvas.width) / 2,
       y: 0
@@ -341,6 +355,107 @@ class PlayerBall extends Ball {
   }
 }
 
+class KeysController {}
+
+document.addEventListener('keydown', (event) => {
+  if (!features.keysControl) return
+  if (!keysController) keysController = new KeysController()
+  switch (event.key) {
+    case "ArrowUp":
+    case "w":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.up = true
+      break
+    case "ArrowDown":
+    case "s":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.down = true
+      break
+    case "ArrowRight":
+    case "d":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.right = true
+      break
+    case "ArrowLeft":
+    case "a":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.left = true
+      break
+    case "Escape":
+      if (isGameOver) break;
+      togglePause()
+      break
+    case "Enter":
+      newGame()
+      break
+  }
+})
+
+document.addEventListener('keyup', (event) => {
+  if (!features.keysControl) return
+  if (!keysController) keysController = new KeysController()
+  switch (event.key) {
+    case "ArrowUp":
+    case "w":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.up = false
+      break;
+    case "ArrowDown":
+    case "s":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.down = false
+      break;
+    case "ArrowRight":
+    case "d":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.right = false
+      break;
+    case "ArrowLeft":
+    case "a":
+      if (isGameOver) break;
+      player.controller = keysController
+      keysController.left = false
+      break;
+  }
+})
+
+class MouseController {}
+
+document.addEventListener('mousedown', (event) => {
+  if (!features.mouseControl) return
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver) player.controller = mouseController
+  mouseController.clicking = true
+  mouseController.x = event.pageX / canvas.width
+  mouseController.y = event.pageY / canvas.height
+});
+
+document.addEventListener('mouseup', (event) => {
+  if (!features.mouseControl) return
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver) player.controller = mouseController
+  mouseController.clicking = false
+  mouseController.x = event.pageX / canvas.width
+  mouseController.y = event.pageY / canvas.height
+});
+
+document.addEventListener('mousemove', (event) => {
+  if (!features.mouseControl) return
+  if (!mouseController) mouseController = new MouseController()
+  if (!isGameOver && mouseController.clicking) player.controller = mouseController
+  if (mouseController.clicking) {
+    mouseController.x = event.pageX / canvas.width,
+    mouseController.y = event.pageY / canvas.height
+  }
+});
+
 const getClosestEnemy = () => {
   return enemies.length && enemies.reduce((enemyA, enemyB) => {
     enemyA.distanceToPlayer = enemyA.distanceToPlayer || getDistanceBetweenEntityCenters(player, enemyA)
@@ -360,7 +475,7 @@ class AIPlayerBall extends PlayerBall {
   }
   update() {
     super.update()
-    if (!(gameTime % 10 == 0)) return
+    if (!(gameTime % 30 == 0)) return
     const closestEnemy = getClosestEnemy()
     if (!closestEnemy) return;
     const angleAwayFromEnemy = getAngleBetweenPoints(player, closestEnemy) + Math.PI;
@@ -598,102 +713,6 @@ window.addEventListener('resize', () => {
 })
 
 const togglePause = () => pause = !pause
-
-class KeysController {}
-
-document.addEventListener('keydown', (event) => {
-  if (!keysController) keysController = new KeysController()
-  switch (event.key) {
-    case "ArrowUp":
-    case "w":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.up = true
-      break
-    case "ArrowDown":
-    case "s":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.down = true
-      break
-    case "ArrowRight":
-    case "d":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.right = true
-      break
-    case "ArrowLeft":
-    case "a":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.left = true
-      break
-    case "Escape":
-      if (isGameOver) break;
-      togglePause()
-      break
-    case "Enter":
-      newGame()
-      break
-  }
-})
-
-document.addEventListener('keyup', (event) => {
-  if (!keysController) keysController = new KeysController()
-  switch (event.key) {
-    case "ArrowUp":
-    case "w":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.up = false
-      break;
-    case "ArrowDown":
-    case "s":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.down = false
-      break;
-    case "ArrowRight":
-    case "d":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.right = false
-      break;
-    case "ArrowLeft":
-    case "a":
-      if (isGameOver) break;
-      player.controller = keysController
-      keysController.left = false
-      break;
-  }
-})
-
-class MouseController {}
-
-document.addEventListener('mousedown', (event) => {
-  if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver) player.controller = mouseController
-  mouseController.clicking = true
-  mouseController.x = event.pageX / canvas.width
-  mouseController.y = event.pageY / canvas.height
-});
-
-document.addEventListener('mouseup', (event) => {
-  if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver) player.controller = mouseController
-  mouseController.clicking = false
-  mouseController.x = event.pageX / canvas.width
-  mouseController.y = event.pageY / canvas.height
-});
-
-document.addEventListener('mousemove', (event) => {
-  if (!mouseController) mouseController = new MouseController()
-  if (!isGameOver && mouseController.clicking) player.controller = mouseController
-  if (mouseController.clicking) {
-    mouseController.x = event.pageX / canvas.width,
-    mouseController.y = event.pageY / canvas.height
-  }
-});
 
 const newGame = () => {
   player = new PlayerBall()
