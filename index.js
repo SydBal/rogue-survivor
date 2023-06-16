@@ -390,7 +390,7 @@ document.addEventListener('keydown', (event) => {
       togglePause()
       break
     case "Enter":
-      newGame()
+      if (isGameOver) newGame()
       break
   }
 })
@@ -456,6 +456,51 @@ document.addEventListener('mousemove', (event) => {
   }
 });
 
+class GamepadController {}
+
+window.addEventListener("gamepadconnected", (e) => {
+  const connectedGamepad = navigator.getGamepads()[e.gamepad.index]
+  console.log(
+    "Gamepad connected at index %d: %s. %d buttons, %d axes.",
+    e.gamepad.index,
+    e.gamepad.id,
+    e.gamepad.buttons.length,
+    e.gamepad.axes.length
+  );
+  gamepadController = new GamepadController()
+  gamepadController.axes = connectedGamepad.axes
+  gamepadController.buttons = connectedGamepad.buttons
+});
+
+const handleGamePad = () => {
+  if (gamepadController) {
+    const currentGamepad = navigator.getGamepads()[0]
+    if (
+      gamepadController.axes[0] == currentGamepad.axes[0]
+      && gamepadController.axes[1] == currentGamepad.axes[1]
+    ) return
+    gamepadController.axes = currentGamepad.axes
+    gamepadController.buttons = currentGamepad.buttons
+    if (!isGameOver) {
+      if (
+        gamepadController.axes[0] > 0.25
+        || gamepadController.axes[0] < -0.25
+        || gamepadController.axes[1] > 0.25
+        || gamepadController.axes[1] < -0.25
+      ) {
+        gamepadController.x = gamepadController.axes[0]
+        gamepadController.y = gamepadController.axes[1]
+      } else {
+        gamepadController.x = 0
+        gamepadController.y = 0
+      }
+      player.controller = gamepadController
+    }
+    if (gamepad.buttons[9].pressed) gameState.pause = !gameState.pause
+  }
+}
+
+
 const getClosestEnemy = () => {
   return enemies.length && enemies.reduce((enemyA, enemyB) => {
     enemyA.distanceToPlayer = enemyA.distanceToPlayer || getDistanceBetweenEntityCenters(player, enemyA)
@@ -475,7 +520,8 @@ class AIPlayerBall extends PlayerBall {
   }
   update() {
     super.update()
-    if (!(gameTime % 30 == 0)) return
+    if (!(enemies && enemies.length)) return
+    if (!(gameTime % 10 == 0)) return
     const closestEnemy = getClosestEnemy()
     if (!closestEnemy) return;
     const angleAwayFromEnemy = getAngleBetweenPoints(player, closestEnemy) + Math.PI;
@@ -503,6 +549,21 @@ const moveBasedOnMouse = (ball) => {
     const angleToMouse = getAngleBetweenPoints(player, player.controller)
     ball.x -= player.speed * Math.cos(angleToMouse)
     ball.y -= player.speed * Math.sin(angleToMouse)
+  }
+}
+
+const moveBasedOnGamepad = (ball) => {
+  if (
+    player.controller instanceof GamepadController
+  ) {
+    if (player.controller.x === 0 && player.controller.y === 0) {
+      return
+    }
+    relativeX = player.controller.x + player.x
+    relativeY = player.controller.y + player.y
+    const angleToGamepad = getAngleBetweenPoints(player, {x:relativeX, y:relativeY})
+    ball.x -= player.speed * Math.cos(angleToGamepad)
+    ball.y -= player.speed * Math.sin(angleToGamepad)
   }
 }
 
@@ -565,8 +626,9 @@ class EnemyBall extends Ball {
     this.x += this.speedX
     this.y += this.speedY
     moveBasedOnKeyBoard(this)
-    moveBasedOnMouse(this);
-    handleEnemyOutOfBounds(this);
+    moveBasedOnMouse(this)
+    moveBasedOnGamepad(this)
+    handleEnemyOutOfBounds(this)
     handleEnemyCollisions(this)
   }
 }
@@ -788,6 +850,7 @@ gameOver = () => {
 }
 
 const playGame = () => {
+  handleGamePad()
   if (!isGameOver && checkIsGameOver()) {
     gameOver()
   }
@@ -811,6 +874,7 @@ const init = () => {
   pause = false
   mouseController = false
   keysController = false
+  gamepadController = false
   gameTime = 0
   isGameOver = true
   preGame = true
