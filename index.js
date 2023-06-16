@@ -460,16 +460,16 @@ class GamepadController {}
 
 window.addEventListener("gamepadconnected", (e) => {
   const connectedGamepad = navigator.getGamepads()[e.gamepad.index]
-  console.log(
-    "Gamepad connected at index %d: %s. %d buttons, %d axes.",
-    e.gamepad.index,
-    e.gamepad.id,
-    e.gamepad.buttons.length,
-    e.gamepad.axes.length
-  );
+  console.log("Gamepad connected.", connectedGamepad);
   gamepadController = new GamepadController()
+  gamepadController.index = e.gamepad.index
   gamepadController.axes = connectedGamepad.axes
   gamepadController.buttons = connectedGamepad.buttons
+});
+
+window.addEventListener("gamepaddisconnected", (e) => {
+  console.log("Gamepad disconnected.", e);
+  if (e.gamepad.index === gamepadController.index) gamepadController = false
 });
 
 const handleGamePad = () => {
@@ -496,7 +496,6 @@ const handleGamePad = () => {
       }
       player.controller = gamepadController
     }
-    if (gamepad.buttons[9].pressed) gameState.pause = !gameState.pause
   }
 }
 
