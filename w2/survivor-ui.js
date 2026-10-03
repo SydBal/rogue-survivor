@@ -6,10 +6,21 @@
  * style: plain boxes, no cropped corners, hard offset shadows like the ones
  * on dominic.balass.one (`box-shadow: 6px 6px 0 var(--accent-soft)`).
  *
+ * DESIGN DECISION — one scale factor, like the game and like Dymensions:
+ * Classic Scoundrel lays out all UI in a virtual resolution and maps it onto
+ * the canvas with a single scale (Dymensions.toScale). Rogue Survivor's game
+ * world does the same thing with `gameSize`: every entity length is a
+ * fraction of it. The menus follow both: EVERY menu length below is a
+ * fraction of `gameSize` (see SurvivorDimensions), so menus and game can
+ * never drift apart on ultrawide, laptop, or portrait phones. There are no
+ * fixed-pixel widths anywhere — panels measure their own text with
+ * measureText and size to fit, which is what keeps labels inside their boxes
+ * at every aspect ratio. (Week 1 of this UI hardcoded 440px panels while
+ * fonts scaled with gameSize; on ultrawide the title spilled out of its box.)
+ *
  * This file must load BEFORE index.js. It only defines classes and helpers;
- * everything it touches from the engine (canvasContext, gameSize,
- * getScaledFontPixelValue, mouseController, canvas) is resolved at call time,
- * when index.js has already run.
+ * everything it touches from the engine (canvasContext, gameSize, canvas,
+ * mouseController) is resolved at call time, when index.js has already run.
  * ========================================================================== */
 
 const SurvivorUITheme = {
@@ -29,8 +40,65 @@ const SurvivorUITheme = {
   borderWidth: 2,
 }
 
-// Hard offset shadow, scaled with the game like everything else here.
-const survivorShadowOffset = () => Math.max(4, Math.round(gameSize * 0.006))
+// ---------------------------------------------------------------------------
+// SurvivorDimensions — the single-scale layout system. All values are
+// fractions of `gameSize`, the same unit the game world is drawn in.
+// ---------------------------------------------------------------------------
+const SurvivorDimensions = {
+  fontBase: 0.02, // the game's own base font fraction (getScaledFontPixelValue)
+  titleMul: 1.6, // panel title font = fontBase * titleMul
+  bodyMul: 0.95, // modal body font = fontBase * bodyMul
+  statMul: 1.1, // game-over stat lines = fontBase * statMul
+  buttonHMul: 1.9, // button height = fontBase * buttonHMul
+  buttonWRatio: 0.62, // button width = panelWidth * buttonWRatio
+  gapMul: 0.55, // vertical gaps = fontBase * gapMul
+  padMul: 0.8, // panel padding = fontBase * padMul
+  lineHMul: 1.3, // stat/body line height = fontBase * lineHMul
+  shadow: 0.006, // hard offset shadow, like the site's 6px 6px 0
+  minPanel: 0.22, // panels never narrower than this fraction of gameSize...
+  maxPanel: 0.6, // ...nor wider than this
+}
+
+const uiPx = (fraction) => Math.max(1, Math.round(fraction * gameSize))
+const uiFontBase = () => uiPx(SurvivorDimensions.fontBase)
+const buttonLabelPx = (buttonHeight) => Math.max(12, Math.round(buttonHeight * 0.4))
+
+const measureTextWidth = (text, fontPx) => {
+  canvasContext.font = `${fontPx}px ${SurvivorUITheme.fontFamily}`
+  return canvasContext.measureText(text).width
+}
+
+// Panel width from content: the widest of the title, body lines, and button
+// labels (labels are scaled up because buttons only span buttonWRatio of the
+// panel). Clamped to the screen and to sane fractions so nothing can overflow.
+const fitPanelWidth = ({ title, titlePx, lines = [], linePx, buttonLabels = [], labelPx }) => {
+  const D = SurvivorDimensions
+  let need = 0
+  if (title) need = Math.max(need, measureTextWidth(title, titlePx))
+  lines.forEach((line) => {
+    need = Math.max(need, measureTextWidth(line, linePx))
+  })
+  buttonLabels.forEach((label) => {
+    need = Math.max(need, measureTextWidth(label, labelPx) / D.buttonWRatio)
+  })
+  const pad = uiPx(D.fontBase * D.padMul)
+  const minW = uiPx(D.minPanel)
+  const maxW = Math.max(minW, Math.min(canvas.width * 0.94, uiPx(D.maxPanel)))
+  return Math.min(maxW, Math.max(minW, Math.round(need + pad * 2 + uiPx(0.02))))
+}
+
+// Standard fit for a titled panel with buttons and optional body lines.
+const fitTitledPanel = (menu, lines = [], linePx = uiFontBase()) => {
+  const D = SurvivorDimensions
+  return fitPanelWidth({
+    title: menu.container.title,
+    titlePx: menu.container.titleFontPx(),
+    lines,
+    linePx,
+    buttonLabels: menu.buttons.map((b) => b.label),
+    labelPx: buttonLabelPx(uiPx(D.fontBase * D.buttonHMul)),
+  })
+}
 
 // Pointer in canvas pixels, from whichever mouse/touch controller is live.
 const getPointerPixels = () => {
@@ -288,7 +356,7 @@ class SurvivorButton {
 
   draw() {
     const t = SurvivorUITheme
-    const s = survivorShadowOffset()
+    const s = uiPx(SurvivorDimensions.shadow)
     const pressed = this.isPressed
     // Pressed buttons shift down-right and their shadow shrinks: pushed in.
     const ox = pressed ? 2 : 0
@@ -315,8 +383,7 @@ class SurvivorButton {
           : t.border
     canvasContext.strokeRect(x, y, this.width, this.height)
 
-    const fontPx = Math.max(12, Math.round(this.height * 0.4))
-    canvasContext.font = `${fontPx}px ${t.fontFamily}`
+    canvasContext.font = `${buttonLabelPx(this.height)}px ${t.fontFamily}`
     canvasContext.textAlign = 'center'
     canvasContext.textBaseline = 'middle'
     canvasContext.fillStyle = this.isDisabled ? t.disabledText : t.text
@@ -326,8 +393,7 @@ class SurvivorButton {
 
 // ---------------------------------------------------------------------------
 // SurvivorContainer — a plain panel with a hard offset shadow and an optional
-// title. Content is drawn through a callback that receives the padded content
-// bounds, Classic Scoundrel style.
+// title. Content is drawn through a callback, Classic Scoundrel style.
 // ---------------------------------------------------------------------------
 class SurvivorContainer {
   constructor({ title = '', padding = 24 }) {
@@ -347,7 +413,7 @@ class SurvivorContainer {
   }
 
   titleFontPx() {
-    return getScaledFontPixelValue(1.6)
+    return uiFontBase() * SurvivorDimensions.titleMul
   }
 
   // Vertical space the title occupies, including its breathing room.
@@ -358,7 +424,7 @@ class SurvivorContainer {
 
   draw(drawContent) {
     const t = SurvivorUITheme
-    const s = survivorShadowOffset()
+    const s = uiPx(SurvivorDimensions.shadow)
 
     canvasContext.fillStyle = t.shadow
     canvasContext.fillRect(this.x + s, this.y + s, this.width, this.height)
@@ -393,19 +459,20 @@ class SurvivorContainer {
 }
 
 // ---------------------------------------------------------------------------
-// Shared menu-panel layout: centers a container on screen and stacks its
-// buttons. Pure math from the current canvas size, so it stays correct
-// across resizes with no extra wiring. Menus declare bodyHeight(fontBase)
-// when they draw extra content (stats lines, etc.) between title and buttons.
+// Shared menu-panel layout: centers a content-fitted container on screen and
+// stacks its buttons. Pure math from the current canvas size, re-run every
+// frame, so resizes just work. Menus implement fitWidth() (via fitTitledPanel)
+// and optionally bodyHeight().
 // ---------------------------------------------------------------------------
 const layoutMenuPanel = (menu) => {
-  const fontBase = getScaledFontPixelValue(1)
-  const width = Math.min(menu.panelWidth || 440, canvas.width * 0.92)
-  const gap = Math.round(fontBase * 0.55)
-  const buttonHeight = Math.round(fontBase * 1.9)
-  const pad = Math.round(fontBase * 0.8)
+  const D = SurvivorDimensions
+  const fontBase = uiFontBase()
+  const width = menu.fitWidth()
+  const gap = Math.round(fontBase * D.gapMul)
+  const buttonHeight = Math.round(fontBase * D.buttonHMul)
+  const pad = Math.round(fontBase * D.padMul)
   const headerH = menu.container.headerHeight()
-  const bodyH = menu.bodyHeight ? menu.bodyHeight(fontBase) : 0
+  const bodyH = menu.bodyHeight ? menu.bodyHeight() : 0
   const buttonsH = menu.buttons.length * buttonHeight
     + Math.max(0, menu.buttons.length - 1) * gap
   const height = pad + headerH + bodyH + buttonsH + pad
@@ -413,7 +480,7 @@ const layoutMenuPanel = (menu) => {
   const y = Math.round((canvas.height - height) / 2)
   menu.container.setBounds(x, y, width, height)
   menu.container.padding = pad
-  const buttonWidth = Math.min(Math.round(width * 0.62), 320)
+  const buttonWidth = Math.round(width * D.buttonWRatio)
   let buttonY = y + pad + headerH + bodyH
   menu.buttons.forEach((button) => {
     button.setBounds(Math.round(x + (width - buttonWidth) / 2), Math.round(buttonY), buttonWidth, buttonHeight)
@@ -436,15 +503,14 @@ const drawMenuPanel = (menu, drawBody) => {
 }
 
 // ---------------------------------------------------------------------------
-// SurvivorModal — dim backdrop, centered SurvivorContainer, body lines, and a
-// button stack. Opens into the owning menu's focus manager as a trap; closing
-// restores whatever was focused before, Classic Scoundrel style.
+// SurvivorModal — dim backdrop, centered content-fitted SurvivorContainer,
+// body lines, and a button stack. Opens into the owning menu's focus manager
+// as a trap; closing restores whatever was focused before.
 // ---------------------------------------------------------------------------
 class SurvivorModal {
   // bodyLines: array of strings, or { text, dim: true } for secondary lines.
-  constructor({ title = '', width = 440, bodyLines = [], buttons = [] }) {
+  constructor({ title = '', bodyLines = [], buttons = [] }) {
     this.title = title
-    this.width = width
     this.bodyLines = bodyLines
     this.buttons = buttons
     this.visible = false
@@ -468,13 +534,26 @@ class SurvivorModal {
     this.visible = false
   }
 
+  fitWidth() {
+    const D = SurvivorDimensions
+    return fitPanelWidth({
+      title: this.title,
+      titlePx: uiFontBase() * D.titleMul,
+      lines: this.bodyLines.map((line) => (typeof line === 'string' ? line : line.text)),
+      linePx: uiFontBase() * D.bodyMul,
+      buttonLabels: this.buttons.map((b) => b.label),
+      labelPx: buttonLabelPx(uiPx(D.fontBase * D.buttonHMul)),
+    })
+  }
+
   layout() {
-    const fontBase = getScaledFontPixelValue(1)
-    const width = Math.min(this.width, canvas.width * 0.92)
-    const gap = Math.round(fontBase * 0.55)
-    const buttonHeight = Math.round(fontBase * 1.9)
-    const pad = Math.round(fontBase * 0.8)
-    const lineH = Math.round(fontBase * 1.3)
+    const D = SurvivorDimensions
+    const fontBase = uiFontBase()
+    const width = this.fitWidth()
+    const gap = Math.round(fontBase * D.gapMul)
+    const buttonHeight = Math.round(fontBase * D.buttonHMul)
+    const pad = Math.round(fontBase * D.padMul)
+    const lineH = Math.round(fontBase * D.lineHMul)
     const headerH = this.container.headerHeight()
     const bodyH = this.bodyLines.length * lineH + (this.bodyLines.length ? gap : 0)
     const buttonsH = this.buttons.length * buttonHeight
@@ -484,7 +563,7 @@ class SurvivorModal {
     const y = Math.round((canvas.height - height) / 2)
     this.container.setBounds(x, y, width, height)
     this.container.padding = pad
-    const buttonWidth = Math.min(Math.round(width * 0.62), 320)
+    const buttonWidth = Math.round(width * D.buttonWRatio)
     let buttonY = y + pad + headerH + bodyH
     this.buttons.forEach((button) => {
       button.setBounds(Math.round(x + (width - buttonWidth) / 2), Math.round(buttonY), buttonWidth, buttonHeight)
@@ -506,11 +585,12 @@ class SurvivorModal {
   draw() {
     if (!this.visible) return
     const t = SurvivorUITheme
+    const D = SurvivorDimensions
     canvasContext.fillStyle = t.backdrop
     canvasContext.fillRect(0, 0, canvas.width, canvas.height)
     this.layout()
     const { lineH, firstLineY, centerX } = this.bodyLayout
-    const fontPx = Math.round(getScaledFontPixelValue(0.95))
+    const fontPx = Math.round(uiFontBase() * D.bodyMul)
     this.container.draw(() => {
       canvasContext.font = `${fontPx}px ${t.fontFamily}`
       canvasContext.textAlign = 'center'
