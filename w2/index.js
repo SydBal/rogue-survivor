@@ -210,7 +210,6 @@ class Menu {
 class StartMenu extends Menu {
   constructor() {
     super()
-    this.panelWidth = 460
     this.focus = new SurvivorFocusManager()
     this.container = new SurvivorContainer({ title: 'Rogue Survivor' })
     this.startButton = new SurvivorButton({
@@ -228,7 +227,6 @@ class StartMenu extends Menu {
     this.focus.setFocusById('start-game')
     this.howToModal = new SurvivorModal({
       title: 'How to Play',
-      width: 480,
       bodyLines: [
         'You are a circle. Red circles want you dead.',
         'Your shield orbits you and smashes them.',
@@ -251,6 +249,9 @@ class StartMenu extends Menu {
     // The open modal owns the pointer; menu buttons behind it stay inert.
     if (!this.howToModal.visible) updateMenuPanel(this)
     this.howToModal.update(getPointerPixels())
+  }
+  fitWidth() {
+    return fitTitledPanel(this)
   }
   draw() {
     if (!preGame) return
@@ -292,7 +293,6 @@ class InGameMenu extends Menu {
 class EndGameMenu extends Menu {
   constructor() {
     super()
-    this.panelWidth = 440
     this.focus = new SurvivorFocusManager()
     this.container = new SurvivorContainer({ title: 'Game Over' })
     this.restartButton = new SurvivorButton({
@@ -304,9 +304,19 @@ class EndGameMenu extends Menu {
     this.focus.registerAll(this.buttons)
     this.focus.setFocusById('play-again')
   }
+  statLines() {
+    return [`Score: ${score}`, `Time: ${gameOverTime}`, `Level reached: ${level}`]
+  }
+  statFontPx() {
+    return Math.round(uiFontBase() * SurvivorDimensions.statMul)
+  }
   // Three stat lines between the title and the button.
-  bodyHeight(fontBase) {
-    return Math.round(fontBase * 1.3) * 3 + Math.round(fontBase * 0.55)
+  bodyHeight() {
+    const D = SurvivorDimensions
+    return uiPx(D.fontBase * D.lineHMul) * 3 + Math.round(uiFontBase() * D.gapMul)
+  }
+  fitWidth() {
+    return fitTitledPanel(this, this.statLines(), this.statFontPx())
   }
   update() {
     if (!isGameOver || preGame) return
@@ -315,22 +325,21 @@ class EndGameMenu extends Menu {
   draw() {
     if (!isGameOver || preGame) return
     this.drawBackground()
-    const fontBase = getScaledFontPixelValue(1)
-    const lineH = Math.round(fontBase * 1.3)
-    const fontPx = Math.round(fontBase * 1.1)
+    const lineH = uiPx(SurvivorDimensions.fontBase * SurvivorDimensions.lineHMul)
+    const fontPx = this.statFontPx()
+    const lines = this.statLines()
     drawMenuPanel(this, () => {
       const t = SurvivorUITheme
       canvasContext.font = `${fontPx}px ${t.fontFamily}`
       canvasContext.textAlign = 'center'
       canvasContext.textBaseline = 'middle'
-      canvasContext.fillStyle = t.text
       const cx = this.container.x + this.container.width / 2
       const topY = this.container.y + this.container.padding
         + this.container.headerHeight() + lineH / 2
-      canvasContext.fillText(`Score: ${score}`, cx, topY)
-      canvasContext.fillText(`Time: ${gameOverTime}`, cx, topY + lineH)
-      canvasContext.fillStyle = t.textDim
-      canvasContext.fillText(`Level reached: ${level}`, cx, topY + lineH * 2)
+      lines.forEach((line, i) => {
+        canvasContext.fillStyle = i < 2 ? t.text : t.textDim
+        canvasContext.fillText(line, cx, topY + i * lineH)
+      })
     })
   }
   handleKeyDown(event) {
@@ -345,7 +354,6 @@ class EndGameMenu extends Menu {
 class PauseMenu extends Menu {
   constructor() {
     super()
-    this.panelWidth = 380
     this.focus = new SurvivorFocusManager()
     this.container = new SurvivorContainer({ title: 'Paused' })
     this.resumeButton = new SurvivorButton({
@@ -364,6 +372,9 @@ class PauseMenu extends Menu {
     this.buttons = [this.resumeButton, this.restartButton]
     this.focus.registerAll(this.buttons)
     this.focus.setFocusById('resume')
+  }
+  fitWidth() {
+    return fitTitledPanel(this)
   }
   update() {
     if (!pause) return
