@@ -1255,6 +1255,7 @@ const killBoss = (boss) => {
   removeSelfFromArray(boss, enemies)
   createExplosion({ x: boss.x, y: boss.y, size: boss.size * 2, color: 'white' })
   createExplosion({ x: boss.x, y: boss.y, size: boss.size, color: boss.color })
+  if (isGameOver) return // a dead run doesn't advance
   score += 100 * actNumber
   onActCleared()
 }
@@ -1567,7 +1568,7 @@ const update = () => {
     ...menus,
     destinationMarker,
   ]).forEach((entity) => entity && entity.update && entity.update())
-  if (currentRoom && !currentRoom.cleared) {
+  if (currentRoom && !currentRoom.cleared && !isGameOver) {
     currentRoom.spawnTick()
     if (currentRoom.checkCleared()) onRoomCleared()
   }
