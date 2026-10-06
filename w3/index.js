@@ -1314,62 +1314,72 @@ const onActCleared = () => {
 // MapMenu — the Slay-the-Spire-style act map between rooms. Free choice for
 // now: any node in the current round column (or the boss, when unlocked).
 // ---------------------------------------------------------------------------
+// Virtual map panel (Dymensions convention): the ENTIRE panel — title,
+// subtitle, node grid, labels, hint — is authored in this fixed virtual
+// space. One uniform scale maps it to the screen, so the panel hugs the map
+// on every screen and the geometry is identical everywhere. No letterbox
+// inside the panel, no morphing, no drift.
+const MAP_VW = 1000
+const MAP_VH = 880
+const MAP_TITLE_Y = 58
+const MAP_TITLE_PX = 48
+const MAP_SUB_Y = 118
+const MAP_SUB_PX = 26
+const mapColX = (col) => 125 + col * 250
+const mapRowY = (row) => 205 + row * 230
+const MAP_NODE_R = 42
+const MAP_BOSS_R = 58
+const MAP_LABEL_PX = 24
+const MAP_LABEL_MIN_PX = 12 // legibility floor; pure Dymensions would go smaller
+const MAP_HINT_Y = 835
+const MAP_HINT_PX = 22
+
 class MapMenu extends Menu {
   constructor() {
     super()
     this.focus = new SurvivorFocusManager()
     this.container = new SurvivorContainer({ title: 'Act 1' })
+    // Scoped Dymensions: the same uniform-scale algorithm, applied to the
+    // node field rect instead of the canvas.
+    this.mapDym = createDymensions(MAP_VW, MAP_VH)
     this.wasDown = false
     this.lastMapKey = null
   }
-  // The map lives in a large centered SurvivorContainer, like every other
-  // menu. layoutPanel sets the container's bounds/title/padding and returns
-  // the content rect; layoutNodes places nodes inside it.
-  layoutPanel() {
-    const pw = canvas.width * 0.94
-    const ph = canvas.height * 0.9
-    const x = (canvas.width - pw) / 2
-    const y = (canvas.height - ph) / 2
-    this.container.title = `Act ${actNumber}`
-    this.container.padding = Math.round(uiFontBase() * SurvivorDimensions.padMul)
-    this.container.setBounds(x, y, pw, ph)
-    const pad = this.container.padding
-    const cy = y + pad + this.container.headerHeight()
-    return {
-      x: x + pad,
-      y: cy,
-      width: Math.max(0, pw - pad * 2),
-      height: Math.max(0, y + ph - pad - cy),
-    }
-  }
+  // The map panel is a Dymensions viewport: the whole panel is authored in
+  // the virtual space above, mapped with one uniform scale.
   computeLayout() {
-    const content = this.layoutPanel()
-    const subPx = uiFontBase() * 0.95
-    const hintPx = Math.round(uiFontBase() * 0.8)
-    const labelPx = Math.round(uiFontBase() * 0.8)
-    const cols = 4
-    const insetX = content.width * 0.10
-    const spacingX = (content.width - 2 * insetX) / (cols - 1)
-    // Node radius follows the game UI scale, but never outgrows the column
-    // spacing (portrait phones size gameSize from the long edge).
-    const rNormal = Math.min(uiPx(0.03), spacingX * 0.30)
-    const rBoss = Math.min(uiPx(0.045), spacingX * 0.42)
-    const subH = subPx * 2.6 + rBoss
-    const hintH = hintPx * 2.6 + rBoss + labelPx * 2.4
-    const topY = content.y + subH
-    const botY = content.y + content.height - hintH
-    const colX = (col) => content.x + insetX + col * spacingX
-    const rowY = (row) => topY + (row * (botY - topY)) / 2
+    // Dymensions for the whole panel: uniform min-fit scale, centered.
+    const availW = canvas.width * 0.94
+    const availH = canvas.height * 0.90
+    this.mapDym.resize(availW, availH)
+    const d = this.mapDym
+    // Panel origin (centered avail box) + Dymensions letterbox offsets.
+    // toPositionX/Y already include the offsets — don't add them twice.
+    const px = (canvas.width - availW) / 2
+    const py = (canvas.height - availH) / 2
+    this.container.title = ''
+    this.container.padding = 0
+    this.container.setBounds(px + d.offsetX, py + d.offsetY, d.toScale(MAP_VW), d.toScale(MAP_VH))
+    const sx = (vx) => px + d.toPositionX(vx)
+    const sy = (vy) => py + d.toPositionY(vy)
+    // Labels stay legible: they follow the uniform scale until the floor.
+    const labelPx = Math.max(MAP_LABEL_PX * d.scale, MAP_LABEL_MIN_PX)
     const nodes = []
     actMap.rounds.forEach((roundNodes, col) => {
       roundNodes.forEach((node, row) => {
         nodes.push({ ref: node, type: node.type, mix: node.mix, isBoss: false,
-          col, row, sx: colX(col), sy: rowY(row), r: rNormal })
+          col, row, sx: sx(mapColX(col)), sy: sy(mapRowY(row)),
+          r: d.toScale(MAP_NODE_R), labelPx })
       })
     })
     nodes.push({ isBoss: true, bossType: actMap.bossType, col: 3, row: 1,
-      sx: colX(3), sy: rowY(1), r: rBoss })
-    return { content, nodes, subPx, hintPx }
+      sx: sx(mapColX(3)), sy: sy(mapRowY(1)), r: d.toScale(MAP_BOSS_R), labelPx })
+    return {
+      nodes, sx, sy,
+      titlePx: MAP_TITLE_PX * d.scale,
+      subPx: MAP_SUB_PX * d.scale,
+      hintPx: Math.max(MAP_HINT_PX * d.scale, MAP_LABEL_MIN_PX),
+    }
   }
   nodeState(n) {
     if (n.isBoss) return actMap.roundIndex >= 3 ? 'available' : 'locked'
@@ -1433,17 +1443,18 @@ class MapMenu extends Menu {
     const isHovered = this.hoveredId === this.nodeId(n)
     const baseColor = n.isBoss ? BOSS_INFO[n.bossType].color : ROOM_TYPES[n.type].color
     canvasContext.save()
-    // Shadow + disc.
+    // Shadow + disc. Shadow offset follows the uniform field scale.
+    const sh = Math.max(2, r * 0.14)
     canvasContext.fillStyle = t.shadow
     canvasContext.beginPath()
-    canvasContext.arc(n.sx + 5, n.sy + 5, r, 0, Math.PI * 2)
+    canvasContext.arc(n.sx + sh, n.sy + sh, r, 0, Math.PI * 2)
     canvasContext.fill()
     canvasContext.globalAlpha = state === 'locked' || state === 'skipped' ? 0.25 : 1
     canvasContext.fillStyle = state === 'done' ? '#1c1c26' : '#14141b'
     canvasContext.beginPath()
     canvasContext.arc(n.sx, n.sy, r, 0, Math.PI * 2)
     canvasContext.fill()
-    canvasContext.lineWidth = state === 'available' ? 3 : 2
+    canvasContext.lineWidth = state === 'available' ? Math.max(2, r * 0.08) : Math.max(1.5, r * 0.05)
     canvasContext.strokeStyle = state === 'done' ? t.textDim
       : isFocused ? t.accent
         : isHovered ? t.text
@@ -1460,7 +1471,7 @@ class MapMenu extends Menu {
     const glyph = n.isBoss ? 'B' : ROOM_TYPES[n.type].letter
     if (state === 'done') {
       canvasContext.strokeStyle = t.textDim
-      canvasContext.lineWidth = 3
+      canvasContext.lineWidth = Math.max(2, r * 0.12)
       canvasContext.beginPath()
       canvasContext.moveTo(n.sx - r * 0.35, n.sy)
       canvasContext.lineTo(n.sx - r * 0.05, n.sy + r * 0.3)
@@ -1469,8 +1480,8 @@ class MapMenu extends Menu {
     } else {
       canvasContext.fillText(glyph, n.sx, n.sy + 1)
     }
-    // Label: two short lines so columns never crowd on narrow screens.
-    const labelPx = Math.round(uiFontBase() * 0.8)
+    // Label: two short lines, in virtual units with a legibility floor.
+    const labelPx = Math.round(n.labelPx)
     canvasContext.font = `${labelPx}px ${t.fontFamily}`
     canvasContext.fillStyle = state === 'locked' || state === 'skipped' ? t.textDim : t.text
     if (n.isBoss) {
@@ -1487,29 +1498,26 @@ class MapMenu extends Menu {
     const t = SurvivorUITheme
     canvasContext.fillStyle = t.backdrop
     canvasContext.fillRect(0, 0, canvas.width, canvas.height)
-    const layout = this.computeLayout()
-    this.container.draw(() => {
-      canvasContext.font = `${layout.subPx}px ${t.fontFamily}`
-      canvasContext.textAlign = 'center'
-      canvasContext.textBaseline = 'middle'
-      canvasContext.fillStyle = t.textDim
-      const sub = actMap.roundIndex >= 3
-        ? 'All rooms cleared — choose your boss battle'
-        : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
-      canvasContext.fillText(
-        sub,
-        layout.content.x + layout.content.width / 2,
-        layout.content.y + layout.subPx,
-      )
-      layout.nodes.forEach((n) => this.drawNode(n))
-      canvasContext.font = `${layout.hintPx}px ${t.fontFamily}`
-      canvasContext.fillStyle = t.textDim
-      canvasContext.fillText(
-        'Click, tap, or Tab + Enter',
-        layout.content.x + layout.content.width / 2,
-        layout.content.y + layout.content.height - layout.hintPx,
-      )
-    })
+    const L = this.computeLayout()
+    this.container.draw()
+    canvasContext.save()
+    canvasContext.textAlign = 'center'
+    canvasContext.textBaseline = 'middle'
+    // Title + subtitle, in virtual units.
+    canvasContext.font = `${L.titlePx}px ${t.fontFamily}`
+    canvasContext.fillStyle = t.text
+    canvasContext.fillText(`Act ${actNumber}`, L.sx(MAP_VW / 2), L.sy(MAP_TITLE_Y))
+    canvasContext.font = `${L.subPx}px ${t.fontFamily}`
+    canvasContext.fillStyle = t.textDim
+    const sub = actMap.roundIndex >= 3
+      ? 'All rooms cleared — choose your boss battle'
+      : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
+    canvasContext.fillText(sub, L.sx(MAP_VW / 2), L.sy(MAP_SUB_Y))
+    L.nodes.forEach((n) => this.drawNode(n))
+    canvasContext.font = `${L.hintPx}px ${t.fontFamily}`
+    canvasContext.fillStyle = t.textDim
+    canvasContext.fillText('Click, tap, or Tab + Enter', L.sx(MAP_VW / 2), L.sy(MAP_HINT_Y))
+    canvasContext.restore()
   }
   handleKeyDown(event) {
     if (!mapOpen) return false
@@ -1632,6 +1640,7 @@ window.addEventListener('resize', () => {
   canvas.width = window.innerWidth
   gameSize = getGameSize()
   gameOffset = getGameOffset()
+  Dymensions.resize(canvas.width, canvas.height)
   update()
   draw()
 })
@@ -1698,6 +1707,7 @@ const init = () => {
   idCounter = 0
   gameSize = getGameSize()
   gameOffset = getGameOffset()
+  Dymensions.resize(canvas.width, canvas.height)
   pause = false
   mouseController = null
   keysController = null
