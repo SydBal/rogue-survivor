@@ -1318,27 +1318,58 @@ class MapMenu extends Menu {
   constructor() {
     super()
     this.focus = new SurvivorFocusManager()
+    this.container = new SurvivorContainer({ title: 'Act 1' })
     this.wasDown = false
     this.lastMapKey = null
   }
-  // Layout is pure math from the canvas + actMap, re-run every frame.
-  layoutNodes() {
+  // The map lives in a large centered SurvivorContainer, like every other
+  // menu. layoutPanel sets the container's bounds/title/padding and returns
+  // the content rect; layoutNodes places nodes inside it.
+  layoutPanel() {
+    const pw = canvas.width * 0.94
+    const ph = canvas.height * 0.9
+    const x = (canvas.width - pw) / 2
+    const y = (canvas.height - ph) / 2
+    this.container.title = `Act ${actNumber}`
+    this.container.padding = Math.round(uiFontBase() * SurvivorDimensions.padMul)
+    this.container.setBounds(x, y, pw, ph)
+    const pad = this.container.padding
+    const cy = y + pad + this.container.headerHeight()
+    return {
+      x: x + pad,
+      y: cy,
+      width: Math.max(0, pw - pad * 2),
+      height: Math.max(0, y + ph - pad - cy),
+    }
+  }
+  computeLayout() {
+    const content = this.layoutPanel()
+    const subPx = uiFontBase() * 0.95
+    const hintPx = Math.round(uiFontBase() * 0.8)
+    const labelPx = Math.round(uiFontBase() * 0.8)
     const cols = 4
-    const marginX = canvas.width * 0.12
-    const topY = canvas.height * 0.32
-    const botY = canvas.height * 0.8
-    const colX = (c) => marginX + (c * (canvas.width - 2 * marginX)) / (cols - 1)
-    const rowY = (r) => topY + (r * (botY - topY)) / 2
+    const insetX = content.width * 0.10
+    const spacingX = (content.width - 2 * insetX) / (cols - 1)
+    // Node radius follows the game UI scale, but never outgrows the column
+    // spacing (portrait phones size gameSize from the long edge).
+    const rNormal = Math.min(uiPx(0.03), spacingX * 0.30)
+    const rBoss = Math.min(uiPx(0.045), spacingX * 0.42)
+    const subH = subPx * 2.6 + rBoss
+    const hintH = hintPx * 2.6 + rBoss + labelPx * 2.4
+    const topY = content.y + subH
+    const botY = content.y + content.height - hintH
+    const colX = (col) => content.x + insetX + col * spacingX
+    const rowY = (row) => topY + (row * (botY - topY)) / 2
     const nodes = []
     actMap.rounds.forEach((roundNodes, col) => {
       roundNodes.forEach((node, row) => {
         nodes.push({ ref: node, type: node.type, mix: node.mix, isBoss: false,
-          col, row, sx: colX(col), sy: rowY(row) })
+          col, row, sx: colX(col), sy: rowY(row), r: rNormal })
       })
     })
     nodes.push({ isBoss: true, bossType: actMap.bossType, col: 3, row: 1,
-      sx: colX(3), sy: rowY(1) })
-    return nodes
+      sx: colX(3), sy: rowY(1), r: rBoss })
+    return { content, nodes, subPx, hintPx }
   }
   nodeState(n) {
     if (n.isBoss) return actMap.roundIndex >= 3 ? 'available' : 'locked'
@@ -1354,7 +1385,7 @@ class MapMenu extends Menu {
     if (key === this.lastMapKey) return
     this.lastMapKey = key
     this.focus.clear()
-    const avail = this.layoutNodes().filter((n) => this.nodeState(n) === 'available')
+    const avail = this.computeLayout().nodes.filter((n) => this.nodeState(n) === 'available')
     this.focus.registerAll(avail.map((n) => ({
       id: this.nodeId(n),
       isFocused: false,
@@ -1377,7 +1408,7 @@ class MapMenu extends Menu {
     if (!mapOpen || !actMap) return
     this.syncFocus()
     const pointer = getPointerPixels()
-    const nodes = this.layoutNodes()
+    const { nodes } = this.computeLayout()
     let hovered = null
     if (pointer) {
       nodes.forEach((n) => {
@@ -1391,7 +1422,7 @@ class MapMenu extends Menu {
     this.hoveredId = hovered ? this.nodeId(hovered) : null
   }
   nodeRadius(n) {
-    return uiPx(n.isBoss ? 0.045 : 0.03)
+    return n.r
   }
   drawNode(n) {
     const t = SurvivorUITheme
@@ -1438,13 +1469,17 @@ class MapMenu extends Menu {
     } else {
       canvasContext.fillText(glyph, n.sx, n.sy + 1)
     }
-    // Label.
+    // Label: two short lines so columns never crowd on narrow screens.
     const labelPx = Math.round(uiFontBase() * 0.8)
     canvasContext.font = `${labelPx}px ${t.fontFamily}`
     canvasContext.fillStyle = state === 'locked' || state === 'skipped' ? t.textDim : t.text
-    const label = n.isBoss ? BOSS_INFO[n.bossType].name
-      : `${ROOM_TYPES[n.type].label} · ${ENEMY_MIXES[n.mix].label}`
-    canvasContext.fillText(label, n.sx, n.sy + r + labelPx)
+    if (n.isBoss) {
+      canvasContext.fillText(BOSS_INFO[n.bossType].name, n.sx, n.sy + r + labelPx)
+    } else {
+      canvasContext.fillText(ROOM_TYPES[n.type].label, n.sx, n.sy + r + labelPx)
+      canvasContext.fillStyle = t.textDim
+      canvasContext.fillText(ENEMY_MIXES[n.mix].label, n.sx, n.sy + r + labelPx * 2.1)
+    }
     canvasContext.restore()
   }
   draw() {
@@ -1452,24 +1487,29 @@ class MapMenu extends Menu {
     const t = SurvivorUITheme
     canvasContext.fillStyle = t.backdrop
     canvasContext.fillRect(0, 0, canvas.width, canvas.height)
-    const titlePx = uiFontBase() * 1.6
-    canvasContext.font = `${titlePx}px ${t.fontFamily}`
-    canvasContext.textAlign = 'center'
-    canvasContext.textBaseline = 'middle'
-    canvasContext.fillStyle = t.text
-    canvasContext.fillText(`Act ${actNumber}`, canvas.width / 2, canvas.height * 0.13)
-    const subPx = uiFontBase() * 0.95
-    canvasContext.font = `${subPx}px ${t.fontFamily}`
-    canvasContext.fillStyle = t.textDim
-    const sub = actMap.roundIndex >= 3
-      ? 'All rooms cleared — choose your boss battle'
-      : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
-    canvasContext.fillText(sub, canvas.width / 2, canvas.height * 0.13 + titlePx)
-    this.layoutNodes().forEach((n) => this.drawNode(n))
-    const hintPx = Math.round(uiFontBase() * 0.8)
-    canvasContext.font = `${hintPx}px ${t.fontFamily}`
-    canvasContext.fillStyle = t.textDim
-    canvasContext.fillText('Click, tap, or Tab + Enter', canvas.width / 2, canvas.height * 0.92)
+    const layout = this.computeLayout()
+    this.container.draw(() => {
+      canvasContext.font = `${layout.subPx}px ${t.fontFamily}`
+      canvasContext.textAlign = 'center'
+      canvasContext.textBaseline = 'middle'
+      canvasContext.fillStyle = t.textDim
+      const sub = actMap.roundIndex >= 3
+        ? 'All rooms cleared — choose your boss battle'
+        : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
+      canvasContext.fillText(
+        sub,
+        layout.content.x + layout.content.width / 2,
+        layout.content.y + layout.subPx,
+      )
+      layout.nodes.forEach((n) => this.drawNode(n))
+      canvasContext.font = `${layout.hintPx}px ${t.fontFamily}`
+      canvasContext.fillStyle = t.textDim
+      canvasContext.fillText(
+        'Click, tap, or Tab + Enter',
+        layout.content.x + layout.content.width / 2,
+        layout.content.y + layout.content.height - layout.hintPx,
+      )
+    })
   }
   handleKeyDown(event) {
     if (!mapOpen) return false
