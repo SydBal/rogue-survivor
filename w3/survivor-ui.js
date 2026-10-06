@@ -8,15 +8,20 @@
  *
  * DESIGN DECISION — one scale factor, like the game and like Dymensions:
  * Classic Scoundrel lays out all UI in a virtual resolution and maps it onto
- * the canvas with a single scale (Dymensions.toScale). Rogue Survivor's game
- * world does the same thing with `gameSize`: every entity length is a
- * fraction of it. The menus follow both: EVERY menu length below is a
- * fraction of `gameSize` (see SurvivorDimensions), so menus and game can
- * never drift apart on ultrawide, laptop, or portrait phones. There are no
- * fixed-pixel widths anywhere — panels measure their own text with
- * measureText and size to fit, which is what keeps labels inside their boxes
- * at every aspect ratio. (Week 1 of this UI hardcoded 440px panels while
- * fonts scaled with gameSize; on ultrawide the title spilled out of its box.)
+ * the canvas with a single scale (Dymensions.toScale), ported faithfully below
+ * as createDymensions/Dymensions. Rogue Survivor's game world does the same
+ * thing with `gameSize`: every entity length is a fraction of it. The menus
+ * follow both: EVERY menu length below is a fraction of `gameSize` (see
+ * SurvivorDimensions), so menus and game can never drift apart on ultrawide,
+ * laptop, or portrait phones. There are no fixed-pixel widths anywhere —
+ * panels measure their own text with measureText and size to fit, which is
+ * what keeps labels inside their boxes at every aspect ratio. (Week 1 of
+ * this UI hardcoded 440px panels while fonts scaled with gameSize; on
+ * ultrawide the title spilled out of its box.) The act map goes further:
+ * its node field is authored in a fixed virtual space and mapped through a
+ * scoped Dymensions instance, so the node geometry is identical on every
+ * screen — columns and rows can never drift or crowd when the aspect
+ * changes.
  *
  * This file must load BEFORE index.js. It only defines classes and helpers;
  * everything it touches from the engine (canvasContext, gameSize, canvas,
@@ -62,6 +67,36 @@ const SurvivorDimensions = {
 const uiPx = (fraction) => Math.max(1, Math.round(fraction * gameSize))
 const uiFontBase = () => uiPx(SurvivorDimensions.fontBase)
 const buttonLabelPx = (buttonHeight) => Math.max(12, Math.round(buttonHeight * 0.4))
+
+// ---------------------------------------------------------------------------
+// Dymensions — Classic Scoundrel's "Dynamic Dimensions" virtual-resolution
+// system, ported faithfully (sydbal/scoundrel, src/utils/dimensions.ts).
+// Author UI in a fixed virtual space; ONE uniform scale maps it onto the
+// screen, centered with letterbox offsets. Positions go through
+// toPositionX/toPositionY, sizes through toScale, so nothing repositions
+// relative to anything else when the screen changes.
+//
+// The global instance keeps Scoundrel's 1280x720 default. Scoped instances
+// (createDymensions) apply the same algorithm to a sub-rect, e.g. the map's
+// node field — the convention holds wherever it's used.
+// ---------------------------------------------------------------------------
+const createDymensions = (virtualWidth = 1280, virtualHeight = 720) => ({
+  width: virtualWidth,
+  height: virtualHeight,
+  scale: 1,
+  offsetX: 0,
+  offsetY: 0,
+  resize(w, h) {
+    this.scale = Math.min(w / this.width, h / this.height)
+    this.offsetX = (w - this.width * this.scale) / 2
+    this.offsetY = (h - this.height * this.scale) / 2
+  },
+  toScale(length) { return length * this.scale },
+  toPositionX(virtualX) { return virtualX * this.scale + this.offsetX },
+  toPositionY(virtualY) { return virtualY * this.scale + this.offsetY },
+})
+
+const Dymensions = createDymensions(1280, 720)
 
 const measureTextWidth = (text, fontPx) => {
   canvasContext.font = `${fontPx}px ${SurvivorUITheme.fontFamily}`
