@@ -675,15 +675,26 @@ const setPointerFromTouch = (touch) => {
   mouseController.y = touch.clientY / canvas.height
 }
 
+// The listeners are non-passive and preventDefault: with touch-action: none
+// in CSS this double-locks the browser out of hijacking the drag for
+// scroll, pinch-zoom, or pull-to-refresh while steering.
 document.addEventListener('touchstart', (event) => {
+  event.preventDefault()
   if (event.touches.length) setPointerFromTouch(event.touches[0])
-}, { passive: true })
+}, { passive: false })
 document.addEventListener('touchmove', (event) => {
+  event.preventDefault()
   if (event.touches.length) setPointerFromTouch(event.touches[0])
-}, { passive: true })
-document.addEventListener('touchend', () => {
+}, { passive: false })
+document.addEventListener('touchend', (event) => {
+  event.preventDefault()
   if (mouseController) mouseController.clicking = false
-})
+}, { passive: false })
+document.addEventListener('touchcancel', () => {
+  if (mouseController) mouseController.clicking = false
+}, { passive: true })
+// Legacy iOS pinch gesture.
+document.addEventListener('gesturestart', (event) => event.preventDefault())
 
 class GamepadController {}
 
