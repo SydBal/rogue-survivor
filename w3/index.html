@@ -6,6 +6,13 @@
 <title>Rogue Survivor</title>
 <meta name="description" content="Rogue Survivor: a survivors-like arcade game hand-built in vanilla JavaScript and Canvas 2D. You are a circle. Red circles want you dead.">
 <link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rogue Survivor">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://dominic.balass.one/rogue-survivor/w3/">
 <meta property="og:title" content="Rogue Survivor">
@@ -25,5 +32,13 @@ gtag('config', 'G-C0DG17Z442');
 <canvas id="gameCanvas"></canvas>
 <script src="survivor-ui.js"></script>
 <script src="index.js"></script>
+<script>
+// Offline + Add to Home Screen support.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {})
+  })
+}
+</script>
 </body>
 </html>
