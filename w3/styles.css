@@ -4,8 +4,18 @@ html, body {
   height: 100%;
   overflow: hidden;
   background: #000;
+  overscroll-behavior: none;
+}
+
+body {
+  position: fixed;
+  width: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 canvas {
   display: block;
+  touch-action: none;
 }
