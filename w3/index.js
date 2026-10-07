@@ -1360,7 +1360,7 @@ class MapMenu extends Menu {
     this.mapDym = createDymensions(MAP_VW, MAP_VH)
     this.wasDown = false
     this.lastMapKey = null
-    this._splashAct = null
+    this._splashMap = null
   }
   // The map panel is a Dymensions viewport: the whole panel is authored in
   // the virtual space above, mapped with one uniform scale.
@@ -1422,6 +1422,7 @@ class MapMenu extends Menu {
     if (avail.length) this.focus.setFocusById(this.nodeId(avail[0]))
   }
   choose(n) {
+    if (actSplashT > 0) return // splash blocks all map input
     mapOpen = false
     this.lastMapKey = null
     if (n.isBoss) {
@@ -1433,9 +1434,9 @@ class MapMenu extends Menu {
   }
   update() {
     if (!mapOpen || !actMap) return
-    // Act splash: fires once per act, ticks down, blocks map input while up.
-    if (this._splashAct !== actNumber) {
-      this._splashAct = actNumber
+    // Act splash: fires once per act map, ticks down, blocks map input while up.
+    if (this._splashMap !== actMap) {
+      this._splashMap = actMap
       actSplashT = ACT_SPLASH_SECS
     }
     if (actSplashT > 0) actSplashT -= 1 / 60
@@ -1707,9 +1708,9 @@ const draw = () => {
     ...shields,
     ...explosions,
     destinationMarker,
-    ...menus,
   ]).forEach((entity) => entity && entity.draw && entity.draw())
-  // Room-start countdown: big punching number over a dimmed world.
+  // Room-start countdown: big punching number over a dimmed world,
+  // under the menus so the pause panel stays on top.
   if (countdownT > 0 || goT > 0) {
     const t = SurvivorUITheme
     canvasContext.fillStyle = 'rgba(0, 0, 0, 0.35)'
@@ -1726,6 +1727,7 @@ const draw = () => {
     canvasContext.fillText(label, canvas.width / 2, canvas.height / 2)
     canvasContext.globalAlpha = 1
   }
+  ;[...menus].forEach((menu) => menu && menu.draw && menu.draw())
 }
 
 window.addEventListener('resize', () => {
