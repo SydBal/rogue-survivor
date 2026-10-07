@@ -111,6 +111,14 @@ let currentRoom = null
 let destinationMarker = null
 let mapOpen = false
 let roomClearOpen = false
+// Act splash: full-screen "ACT N" card when a new act's map opens.
+let actSplashT = 0
+const ACT_SPLASH_SECS = 1.8
+// Room countdown: 3-2-1-GO at room start; enemies and spawners frozen.
+let countdownT = 0
+let goT = 0
+const COUNTDOWN_SECS = 3
+const GO_SECS = 0.7
 let roomClearInfo = null
 let bossBag = []
 
@@ -1266,6 +1274,8 @@ const killBoss = (boss) => {
 const startRoom = (room) => {
   currentRoom = room
   room.start()
+  countdownT = COUNTDOWN_SECS
+  goT = 0
 }
 
 const startBossRoom = () => {
@@ -1280,11 +1290,15 @@ const startBossRoom = () => {
     spawnTick() {},
     checkCleared() { return false },
   }
+  countdownT = COUNTDOWN_SECS
+  goT = 0
 }
 
 const onRoomCleared = () => {
   currentRoom.cleared = true
   actMap.roundIndex++
+  countdownT = 0
+  goT = 0
   roomClearInfo = {
     title: 'Room Cleared!',
     subtitle: currentRoom.label,
@@ -1302,6 +1316,8 @@ const onActCleared = () => {
   level = actNumber // the shield's orbit speed-up follows acts now
   actMap = generateAct(actNumber)
   currentRoom = null
+  countdownT = 0
+  goT = 0
   roomClearInfo = {
     title: `${bossName} Slain!`,
     subtitle: `Act ${clearedAct} cleared.`,
@@ -1344,6 +1360,7 @@ class MapMenu extends Menu {
     this.mapDym = createDymensions(MAP_VW, MAP_VH)
     this.wasDown = false
     this.lastMapKey = null
+    this._splashAct = null
   }
   // The map panel is a Dymensions viewport: the whole panel is authored in
   // the virtual space above, mapped with one uniform scale.
@@ -1416,7 +1433,14 @@ class MapMenu extends Menu {
   }
   update() {
     if (!mapOpen || !actMap) return
+    // Act splash: fires once per act, ticks down, blocks map input while up.
+    if (this._splashAct !== actNumber) {
+      this._splashAct = actNumber
+      actSplashT = ACT_SPLASH_SECS
+    }
+    if (actSplashT > 0) actSplashT -= 1 / 60
     this.syncFocus()
+    if (actSplashT > 0) return
     const pointer = getPointerPixels()
     const { nodes } = this.computeLayout()
     let hovered = null
@@ -1513,10 +1537,47 @@ class MapMenu extends Menu {
       ? 'All rooms cleared — choose your boss battle'
       : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
     canvasContext.fillText(sub, L.sx(MAP_VW / 2), L.sy(MAP_SUB_Y))
+    // Path lines: a faint web between adjacent columns (visual only —
+    // choice stays free). Drawn under the nodes.
+    const byCol = [[], [], [], []]
+    L.nodes.forEach((n) => { if (!n.isBoss) byCol[n.col].push(n) })
+    const bossNode = L.nodes.find((n) => n.isBoss)
+    canvasContext.strokeStyle = 'rgba(167, 167, 192, 0.16)'
+    canvasContext.lineWidth = Math.max(1, L.titlePx * 0.025)
+    for (let c = 0; c < 3; c++) {
+      const targets = c === 2 ? [bossNode] : byCol[c + 1]
+      byCol[c].forEach((a) => {
+        targets.forEach((b) => {
+          canvasContext.beginPath()
+          canvasContext.moveTo(a.sx, a.sy)
+          canvasContext.lineTo(b.sx, b.sy)
+          canvasContext.stroke()
+        })
+      })
+    }
     L.nodes.forEach((n) => this.drawNode(n))
     canvasContext.font = `${L.hintPx}px ${t.fontFamily}`
     canvasContext.fillStyle = t.textDim
     canvasContext.fillText('Click, tap, or Tab + Enter', L.sx(MAP_VW / 2), L.sy(MAP_HINT_Y))
+    // Act splash overlay.
+    if (actSplashT > 0) {
+      const aIn = Math.min(1, (ACT_SPLASH_SECS - actSplashT) / 0.25)
+      const aOut = Math.min(1, actSplashT / 0.35)
+      const a = Math.max(0, Math.min(aIn, aOut))
+      canvasContext.fillStyle = `rgba(4, 4, 9, ${0.93 * a})`
+      canvasContext.fillRect(0, 0, canvas.width, canvas.height)
+      canvasContext.textAlign = 'center'
+      canvasContext.textBaseline = 'middle'
+      canvasContext.fillStyle = `rgba(255, 255, 255, ${a})`
+      canvasContext.font = `700 ${Math.max(28, Math.round(gameSize * 0.085))}px ${t.fontFamily}`
+      canvasContext.fillText(`ACT ${actNumber}`, canvas.width / 2, canvas.height / 2 - gameSize * 0.03)
+      canvasContext.fillStyle = `rgba(167, 167, 192, ${a})`
+      canvasContext.font = `${Math.max(14, Math.round(gameSize * 0.028))}px ${t.fontFamily}`
+      canvasContext.fillText(
+        `${BOSS_INFO[actMap.bossType].name} awaits at the end`,
+        canvas.width / 2, canvas.height / 2 + gameSize * 0.045,
+      )
+    }
     canvasContext.restore()
   }
   handleKeyDown(event) {
@@ -1608,19 +1669,34 @@ class RoomClearMenu extends Menu {
 // Game loop (spawning and difficulty are room-driven now)
 // ---------------------------------------------------------------------------
 const update = () => {
-  ;([
-    player,
-    ...shields,
-    ...enemies,
-    ...explosions,
-    ...menus,
-    destinationMarker,
-  ]).forEach((entity) => entity && entity.update && entity.update())
-  if (currentRoom && !currentRoom.cleared && !isGameOver) {
-    currentRoom.spawnTick()
-    if (currentRoom.checkCleared()) onRoomCleared()
+  // Room-start countdown: the whole world holds its breath. Only the
+  // countdown ticks and menus stay alive; the clock doesn't run either,
+  // so survive rooms don't lose seconds to it.
+  const frozen = countdownT > 0
+  if (frozen) {
+    countdownT -= 1 / 60
+    if (countdownT <= 0) {
+      countdownT = 0
+      goT = GO_SECS
+    }
+  } else if (goT > 0) {
+    goT -= 1 / 60
   }
-  incrementTime()
+  if (!frozen) {
+    ;([
+      player,
+      ...shields,
+      ...enemies,
+      ...explosions,
+      destinationMarker,
+    ]).forEach((entity) => entity && entity.update && entity.update())
+    if (currentRoom && !currentRoom.cleared && !isGameOver) {
+      currentRoom.spawnTick()
+      if (currentRoom.checkCleared()) onRoomCleared()
+    }
+    incrementTime()
+  }
+  ;[...menus].forEach((menu) => menu && menu.update && menu.update())
 }
 
 const draw = () => {
@@ -1633,6 +1709,23 @@ const draw = () => {
     destinationMarker,
     ...menus,
   ]).forEach((entity) => entity && entity.draw && entity.draw())
+  // Room-start countdown: big punching number over a dimmed world.
+  if (countdownT > 0 || goT > 0) {
+    const t = SurvivorUITheme
+    canvasContext.fillStyle = 'rgba(0, 0, 0, 0.35)'
+    canvasContext.fillRect(0, 0, canvas.width, canvas.height)
+    const isGo = countdownT <= 0
+    const label = isGo ? 'GO!' : String(Math.ceil(countdownT))
+    const frac = isGo ? goT / GO_SECS : countdownT % 1
+    const pop = 1 + 0.35 * frac
+    canvasContext.font = `700 ${Math.max(24, Math.round(gameSize * 0.11 * pop))}px ${t.fontFamily}`
+    canvasContext.textAlign = 'center'
+    canvasContext.textBaseline = 'middle'
+    canvasContext.fillStyle = isGo ? t.accent : t.text
+    canvasContext.globalAlpha = isGo ? Math.min(1, (goT / GO_SECS) * 2) : 1
+    canvasContext.fillText(label, canvas.width / 2, canvas.height / 2)
+    canvasContext.globalAlpha = 1
+  }
 }
 
 window.addEventListener('resize', () => {
