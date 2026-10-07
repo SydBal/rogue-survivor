@@ -119,6 +119,16 @@ let countdownT = 0
 let goT = 0
 const COUNTDOWN_SECS = 3
 const GO_SECS = 0.7
+// Fade-through-black between full-screen states. startTransition swaps the
+// state at the black point; it never stacks (re-entry just cuts).
+let transitionT = 0
+let transitionMid = null
+const TRANSIT_SECS = 0.3
+const startTransition = (midFn) => {
+  if (transitionT > 0) { midFn(); return }
+  transitionMid = midFn
+  transitionT = TRANSIT_SECS
+}
 let roomClearInfo = null
 let bossBag = []
 
@@ -207,6 +217,22 @@ const incrementTime = () => {
 class Menu {
   getSpacer = () => getScaledFontPixelValue(2)
 
+  constructor() {
+    this.openAnimT = 0 // 0..1, menu open fade+rise progress
+  }
+
+  // Call every update with whether the menu is currently shown.
+  tickOpenAnim(visible) {
+    this.openAnimT = visible ? Math.min(1, this.openAnimT + 1 / 14) : 0
+  }
+
+  // Inside draw(), within save()/restore(): fade in and rise slightly.
+  applyOpenAnim() {
+    const e = 1 - Math.pow(1 - this.openAnimT, 3) // easeOutCubic
+    canvasContext.globalAlpha *= e
+    canvasContext.translate(0, (1 - e) * Math.max(6, gameSize * 0.012))
+  }
+
   drawBackground() {
     const centerX = 0.5 * gameSize - gameOffset.x
     const centerY = 0.5 * gameSize - gameOffset.y
@@ -232,7 +258,7 @@ class StartMenu extends Menu {
     this.startButton = new SurvivorButton({
       id: 'start-game',
       label: 'Start Game',
-      onClick: () => newGame(),
+      onClick: () => startTransition(() => newGame()),
     })
     this.howToButton = new SurvivorButton({
       id: 'how-to-play',
@@ -319,7 +345,7 @@ class EndGameMenu extends Menu {
     this.restartButton = new SurvivorButton({
       id: 'play-again',
       label: 'Play Again',
-      onClick: () => newGame(),
+      onClick: () => startTransition(() => newGame()),
     })
     this.buttons = [this.restartButton]
     this.focus.registerAll(this.buttons)
@@ -340,11 +366,14 @@ class EndGameMenu extends Menu {
     return fitTitledPanel(this, this.statLines(), this.statFontPx())
   }
   update() {
+    this.tickOpenAnim(isGameOver && !preGame)
     if (!isGameOver || preGame) return
     updateMenuPanel(this)
   }
   draw() {
     if (!isGameOver || preGame) return
+    canvasContext.save()
+    this.applyOpenAnim()
     this.drawBackground()
     const lineH = uiPx(SurvivorDimensions.fontBase * SurvivorDimensions.lineHMul)
     const fontPx = this.statFontPx()
@@ -362,6 +391,7 @@ class EndGameMenu extends Menu {
         canvasContext.fillText(line, cx, topY + i * lineH)
       })
     })
+    canvasContext.restore()
   }
   handleKeyDown(event) {
     if (!isGameOver || preGame) return false
@@ -385,10 +415,10 @@ class PauseMenu extends Menu {
     this.restartButton = new SurvivorButton({
       id: 'restart',
       label: 'Restart',
-      onClick: () => {
+      onClick: () => startTransition(() => {
         togglePause()
         newGame()
-      },
+      }),
     })
     this.buttons = [this.resumeButton, this.restartButton]
     this.focus.registerAll(this.buttons)
@@ -398,15 +428,19 @@ class PauseMenu extends Menu {
     return fitTitledPanel(this)
   }
   update() {
+    this.tickOpenAnim(pause)
     if (!pause) return
     updateMenuPanel(this)
   }
   draw() {
     if (!pause) return
+    canvasContext.save()
+    this.applyOpenAnim()
     // Dim the frozen game frame behind the panel.
     canvasContext.fillStyle = SurvivorUITheme.backdrop
     canvasContext.fillRect(0, 0, canvas.width, canvas.height)
     drawMenuPanel(this)
+    canvasContext.restore()
   }
   handleKeyDown(event) {
     if (!pause) return false
@@ -599,7 +633,7 @@ const setKeyDirection = (event, pressed) => {
     return
   }
   if (pressed && event.key === 'Escape' && !isGameOver && !mapOpen && !roomClearOpen) togglePause()
-  if (pressed && event.key === 'Enter' && isGameOver) newGame()
+  if (pressed && event.key === 'Enter' && isGameOver) startTransition(() => newGame())
 }
 
 document.addEventListener('keydown', (event) => {
@@ -1423,14 +1457,17 @@ class MapMenu extends Menu {
   }
   choose(n) {
     if (actSplashT > 0) return // splash blocks all map input
-    mapOpen = false
-    this.lastMapKey = null
-    if (n.isBoss) {
-      startBossRoom()
-    } else {
-      n.ref.picked = true
-      startRoom(new Room({ type: n.ref.type, mix: n.ref.mix, act: actNumber }))
-    }
+    if (transitionT > 0) return // never double-pick through a fade
+    startTransition(() => {
+      mapOpen = false
+      this.lastMapKey = null
+      if (n.isBoss) {
+        startBossRoom()
+      } else {
+        n.ref.picked = true
+        startRoom(new Room({ type: n.ref.type, mix: n.ref.mix, act: actNumber }))
+      }
+    })
   }
   update() {
     if (!mapOpen || !actMap) return
@@ -1601,11 +1638,11 @@ class RoomClearMenu extends Menu {
     this.continueButton = new SurvivorButton({
       id: 'continue',
       label: 'Continue',
-      onClick: () => {
+      onClick: () => startTransition(() => {
         roomClearOpen = false
         roomClearInfo = null
         mapOpen = true
-      },
+      }),
     })
     this.buttons = [this.continueButton]
     this.focus.registerAll(this.buttons)
@@ -1631,12 +1668,15 @@ class RoomClearMenu extends Menu {
     return uiPx(D.fontBase * D.lineHMul) * 5 + Math.round(uiFontBase() * D.gapMul)
   }
   update() {
+    this.tickOpenAnim(roomClearOpen)
     if (!roomClearOpen) return
     if (roomClearInfo) this.container.title = roomClearInfo.title
     updateMenuPanel(this)
   }
   draw() {
     if (!roomClearOpen || !roomClearInfo) return
+    canvasContext.save()
+    this.applyOpenAnim()
     const t = SurvivorUITheme
     const D = SurvivorDimensions
     canvasContext.fillStyle = t.backdrop
@@ -1656,6 +1696,7 @@ class RoomClearMenu extends Menu {
         canvasContext.fillText(line, cx, topY + i * lineH)
       })
     })
+    canvasContext.restore()
   }
   handleKeyDown(event) {
     if (!roomClearOpen) return false
@@ -1728,6 +1769,13 @@ const draw = () => {
     canvasContext.globalAlpha = 1
   }
   ;[...menus].forEach((menu) => menu && menu.draw && menu.draw())
+  // Fade-through-black overlay.
+  if (transitionT > 0) {
+    const half = TRANSIT_SECS / 2
+    const raw = transitionT > half ? 1 - (transitionT - half) / half : transitionT / half
+    canvasContext.fillStyle = `rgba(0, 0, 0, ${Math.max(0, Math.min(1, raw))})`
+    canvasContext.fillRect(0, 0, canvas.width, canvas.height)
+  }
 }
 
 window.addEventListener('resize', () => {
@@ -1765,6 +1813,8 @@ const newGame = () => {
   roomClearOpen = false
   roomClearInfo = null
   pause = false
+  countdownT = 0
+  goT = 0
 }
 
 const checkIsGameOver = () => player.health <= 0
@@ -1780,6 +1830,14 @@ const gameOver = () => {
 
 const playGame = () => {
   handleGamePad()
+  if (transitionT > 0) {
+    transitionT -= 1 / 60
+    if (transitionT <= TRANSIT_SECS / 2 && transitionMid) {
+      const f = transitionMid
+      transitionMid = null
+      f()
+    }
+  }
   if (!isGameOver && checkIsGameOver()) gameOver()
   if (features.hyperTrails) {
     canvasContext.fillStyle = 'rgba(0,0,0,0.1)'
