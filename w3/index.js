@@ -121,6 +121,8 @@ const COUNTDOWN_SECS = 3
 const GO_SECS = 0.7
 // Fade-through-black between full-screen states. startTransition swaps the
 // state at the black point; it never stacks (re-entry just cuts).
+// The route taken through the current act, as node ids. Drives path lighting.
+let playerPath = []
 let transitionT = 0
 let transitionMid = null
 const TRANSIT_SECS = 0.3
@@ -1363,6 +1365,7 @@ const onActCleared = () => {
   currentRoom = null
   countdownT = 0
   goT = 0
+  playerPath = []
   roomClearInfo = {
     title: `${bossName} Slain!`,
     subtitle: `Act ${clearedAct} cleared.`,
@@ -1386,7 +1389,9 @@ const MAP_TITLE_Y = 58
 const MAP_TITLE_PX = 48
 const MAP_SUB_Y = 118
 const MAP_SUB_PX = 26
-const mapColX = (col) => 125 + col * 250
+const MAP_START_X = 70
+const MAP_START_Y = 435
+const mapColX = (col) => 280 + col * 210
 const mapRowY = (row) => 205 + row * 230
 const MAP_NODE_R = 42
 const MAP_BOSS_R = 58
@@ -1436,8 +1441,10 @@ class MapMenu extends Menu {
     })
     nodes.push({ isBoss: true, bossType: actMap.bossType, col: 3, row: 1,
       sx: sx(mapColX(3)), sy: sy(mapRowY(1)), r: d.toScale(MAP_BOSS_R), labelPx })
+    const startNode = { id: 'start', sx: sx(MAP_START_X), sy: sy(MAP_START_Y),
+      r: d.toScale(MAP_NODE_R * 0.8), labelPx }
     return {
-      nodes, sx, sy,
+      nodes, startNode, sx, sy,
       titlePx: MAP_TITLE_PX * d.scale,
       subPx: MAP_SUB_PX * d.scale,
       hintPx: Math.max(MAP_HINT_PX * d.scale, MAP_LABEL_MIN_PX),
@@ -1469,6 +1476,7 @@ class MapMenu extends Menu {
   choose(n) {
     if (actSplashT > 0) return // splash blocks all map input
     if (transitionT > 0) return // never double-pick through a fade
+    playerPath.push(this.nodeId(n))
     startTransition(() => {
       mapOpen = false
       this.lastMapKey = null
@@ -1587,24 +1595,71 @@ class MapMenu extends Menu {
       : `Choose room ${actMap.roundIndex + 1} of 3 — free choice`
     canvasContext.fillText(sub, L.sx(MAP_VW / 2), L.sy(MAP_SUB_Y))
     // Path lines: a faint web between adjacent columns (visual only —
-    // choice stays free). Drawn under the nodes.
+    // choice stays free). Traveled segments light up in accent.
+    const nid = (n) => n.id || this.nodeId(n)
     const byCol = [[], [], [], []]
     L.nodes.forEach((n) => { if (!n.isBoss) byCol[n.col].push(n) })
     const bossNode = L.nodes.find((n) => n.isBoss)
-    canvasContext.strokeStyle = 'rgba(167, 167, 192, 0.16)'
-    canvasContext.lineWidth = Math.max(1, L.titlePx * 0.025)
+    const segments = []
+    byCol[0].forEach((b) => segments.push([L.startNode, b]))
     for (let c = 0; c < 3; c++) {
       const targets = c === 2 ? [bossNode] : byCol[c + 1]
-      byCol[c].forEach((a) => {
-        targets.forEach((b) => {
-          canvasContext.beginPath()
-          canvasContext.moveTo(a.sx, a.sy)
-          canvasContext.lineTo(b.sx, b.sy)
-          canvasContext.stroke()
-        })
-      })
+      byCol[c].forEach((a) => targets.forEach((b) => segments.push([a, b])))
     }
+    const lit = new Set()
+    const seq = ['start', ...playerPath]
+    for (let i = 1; i < seq.length; i++) lit.add(`${seq[i - 1]}>${seq[i]}`)
+    const isLit = (a, b) => lit.has(`${nid(a)}>${nid(b)}`)
+    canvasContext.strokeStyle = 'rgba(167, 167, 192, 0.16)'
+    canvasContext.lineWidth = Math.max(1, L.titlePx * 0.025)
+    segments.forEach(([a, b]) => {
+      if (isLit(a, b)) return
+      canvasContext.beginPath()
+      canvasContext.moveTo(a.sx, a.sy)
+      canvasContext.lineTo(b.sx, b.sy)
+      canvasContext.stroke()
+    })
+    canvasContext.strokeStyle = t.accent
+    canvasContext.globalAlpha = 0.9
+    canvasContext.lineWidth = Math.max(2, L.titlePx * 0.06)
+    canvasContext.shadowColor = t.accent
+    canvasContext.shadowBlur = Math.max(4, L.titlePx * 0.15)
+    segments.forEach(([a, b]) => {
+      if (!isLit(a, b)) return
+      canvasContext.beginPath()
+      canvasContext.moveTo(a.sx, a.sy)
+      canvasContext.lineTo(b.sx, b.sy)
+      canvasContext.stroke()
+    })
+    canvasContext.shadowBlur = 0
+    canvasContext.globalAlpha = 1
     L.nodes.forEach((n) => this.drawNode(n))
+    // Start node: where the run begins. Not interactive.
+    {
+      const s = L.startNode
+      const sr = s.r
+      const sh = Math.max(2, sr * 0.14)
+      canvasContext.save()
+      canvasContext.fillStyle = t.shadow
+      canvasContext.beginPath()
+      canvasContext.arc(s.sx + sh, s.sy + sh, sr, 0, Math.PI * 2)
+      canvasContext.fill()
+      canvasContext.fillStyle = '#14141b'
+      canvasContext.beginPath()
+      canvasContext.arc(s.sx, s.sy, sr, 0, Math.PI * 2)
+      canvasContext.fill()
+      canvasContext.lineWidth = Math.max(2, sr * 0.08)
+      canvasContext.strokeStyle = t.accent
+      canvasContext.beginPath()
+      canvasContext.arc(s.sx, s.sy, sr, 0, Math.PI * 2)
+      canvasContext.stroke()
+      canvasContext.font = `${Math.round(s.labelPx)}px ${t.fontFamily}`
+      canvasContext.textAlign = 'center'
+      canvasContext.textBaseline = 'middle'
+      canvasContext.fillStyle = t.textDim
+      canvasContext.fillText('Start', s.sx, s.sy + sr + s.labelPx)
+      canvasContext.restore()
+    }
     canvasContext.font = `${L.hintPx}px ${t.fontFamily}`
     canvasContext.fillStyle = t.textDim
     canvasContext.fillText('Click, tap, or Tab + Enter', L.sx(MAP_VW / 2), L.sy(MAP_HINT_Y))
@@ -1826,6 +1881,7 @@ const newGame = () => {
   pause = false
   countdownT = 0
   goT = 0
+  playerPath = []
 }
 
 const checkIsGameOver = () => player.health <= 0
