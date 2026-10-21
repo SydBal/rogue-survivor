@@ -20,6 +20,9 @@
  *    `controller.clicked` flag nothing ever read.
  *  - Added: touch events (touchstart / touchmove / touchend) so phones get
  *    first-class input instead of relying on emulated mouse events.
+ *  - Added (Oct 2026 fixes): spawn telegraphs (enemies warn as a pulsing
+ *    ring before they can move or collide), a persistent best score/time
+ *    in localStorage, and synthesized sound effects (no audio files).
  *  - Documented: keyboard input looks "inverted" on purpose. The player
  *    stays near screen center and input shifts the world around them.
  * ========================================================================== */
@@ -40,6 +43,7 @@ const CONFIG = {
     slowSize: 0.026,
     slowFactor: 0.75,
     maxCount: 200,
+    telegraphTicks: 30, // frames a spawn warns before the enemy activates (~0.5s)
     despawnMargin: 0.2, // culled past 1 + margin / 0 - margin
   },
   shield: {
@@ -96,6 +100,8 @@ let isGameOver = true
 let score = 0
 let gameTime = 0
 let gameOverTime = 0
+let bestScore = 0
+let bestTime = 0
 let level = 1
 let player = null
 let shields = []
@@ -105,6 +111,63 @@ let menus = []
 let keysController = null
 let mouseController = null
 let gamepadController = null
+
+// ---------------------------------------------------------------------------
+// Sound: tiny synthesized effects, no audio files. Browsers block audio
+// until a user gesture, so the context is created and resumed lazily from
+// the input listeners below, then reused by every effect.
+// ---------------------------------------------------------------------------
+let audioContext = null
+
+const ensureAudioContext = () => {
+  try {
+    if (!audioContext) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      if (!AudioContextClass) return null
+      audioContext = new AudioContextClass()
+    }
+    if (audioContext.state === 'suspended') audioContext.resume()
+    return audioContext
+  } catch (error) {
+    return null
+  }
+}
+
+const playTone = ({ frequency = 440, endFrequency = null, duration = 0.12, type = 'square', volume = 0.06 } = {}) => {
+  const context = ensureAudioContext()
+  if (!context) return
+  try {
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
+    const startTime = context.currentTime
+    oscillator.type = type
+    oscillator.frequency.setValueAtTime(frequency, startTime)
+    if (endFrequency) {
+      oscillator.frequency.exponentialRampToValueAtTime(endFrequency, startTime + duration)
+    }
+    gain.gain.setValueAtTime(volume, startTime)
+    gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration)
+    oscillator.connect(gain)
+    gain.connect(context.destination)
+    oscillator.start(startTime)
+    oscillator.stop(startTime + duration)
+  } catch (error) {
+    // Sound is decoration only; a failure here must never break the game.
+  }
+}
+
+const playShieldKillSound = () =>
+  playTone({ frequency: 620, endFrequency: 980, duration: 0.09, type: 'square', volume: 0.05 })
+
+const playPlayerHitSound = () =>
+  playTone({ frequency: 150, endFrequency: 55, duration: 0.18, type: 'sawtooth', volume: 0.09 })
+
+const playGameOverSound = () =>
+  playTone({ frequency: 392, endFrequency: 49, duration: 0.6, type: 'triangle', volume: 0.09 })
+
+document.addEventListener('keydown', ensureAudioContext)
+document.addEventListener('mousedown', ensureAudioContext)
+document.addEventListener('touchstart', ensureAudioContext, { passive: true })
 
 // ---------------------------------------------------------------------------
 // Canvas setup
@@ -188,6 +251,34 @@ const incrementTime = () => {
   gameTime++
 }
 
+// Best score persistence. Storage can be unavailable (private mode, blocked
+// cookies), so every access is guarded and the game falls back to keeping
+// the best in memory for the session.
+const BEST_SCORE_KEY = 'rogueSurvivorBest'
+
+const loadBestScore = () => {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(BEST_SCORE_KEY))
+    if (saved && Number.isFinite(saved.score) && Number.isFinite(saved.time)) {
+      bestScore = saved.score
+      bestTime = saved.time
+    }
+  } catch (error) {
+    // No readable storage: bests stay at 0 for this session.
+  }
+}
+
+const recordBestScore = () => {
+  if (score <= bestScore && gameOverTime <= bestTime) return
+  bestScore = Math.max(bestScore, score)
+  bestTime = Math.max(bestTime, gameOverTime)
+  try {
+    window.localStorage.setItem(BEST_SCORE_KEY, JSON.stringify({ score: bestScore, time: bestTime }))
+  } catch (error) {
+    // No writable storage: the in-memory best still shows this session.
+  }
+}
+
 // Shared by every menu: clicking the normalized center square confirms.
 const clickedInCenterBox = (controller) => {
   if (!controller || !controller.clicking) return false
@@ -242,9 +333,10 @@ class StartMenu extends Menu {
     canvasContext.fillStyle = CONFIG.colors.text
     canvasContext.textAlign = 'center'
     canvasContext.textBaseline = 'ideographic'
-    canvasContext.fillText('Rogue Survivor', canvas.width / 2, canvas.height / 2)
+    canvasContext.fillText('Rogue Survivor', canvas.width / 2, canvas.height / 2 - spacer * 0.5)
     canvasContext.font = getScaledFont(1.5)
-    canvasContext.fillText('Tap Enter to Start', canvas.width / 2, canvas.height / 2 + spacer)
+    canvasContext.fillText('Tap Enter to Start', canvas.width / 2, canvas.height / 2 + spacer * 0.5)
+    canvasContext.fillText(`Best: ${bestScore} · ${bestTime}`, canvas.width / 2, canvas.height / 2 + spacer * 1.5)
     canvasContext.restore()
     drawMenuControlsText(canvas.height / 2)
   }
@@ -281,11 +373,12 @@ class EndGameMenu extends Menu {
     canvasContext.fillStyle = CONFIG.colors.text
     canvasContext.textAlign = 'center'
     canvasContext.textBaseline = 'ideographic'
-    canvasContext.fillText('Game Over', canvas.width / 2, canvas.height / 2 - spacer * 2)
+    canvasContext.fillText('Game Over', canvas.width / 2, canvas.height / 2 - spacer * 2.5)
     canvasContext.font = getScaledFont(1.5)
-    canvasContext.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 - spacer)
-    canvasContext.fillText(`Time: ${gameOverTime}`, canvas.width / 2, canvas.height / 2)
-    canvasContext.fillText('Tap Enter to Restart', canvas.width / 2, canvas.height / 2 + spacer)
+    canvasContext.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 - spacer * 1.5)
+    canvasContext.fillText(`Time: ${gameOverTime}`, canvas.width / 2, canvas.height / 2 - spacer * 0.5)
+    canvasContext.fillText(`Best: ${bestScore} · ${bestTime}`, canvas.width / 2, canvas.height / 2 + spacer * 0.5)
+    canvasContext.fillText('Tap Enter to Restart', canvas.width / 2, canvas.height / 2 + spacer * 1.5)
     canvasContext.restore()
     drawMenuControlsText(canvas.height / 2)
   }
@@ -607,10 +700,12 @@ const handleEnemyCollisions = (enemy) => {
   if (collisionWithPlayer) {
     createExplosion({ x: collisionWithPlayer.x, y: collisionWithPlayer.y, size: enemy.size })
     player.health -= 1
+    playPlayerHitSound()
   }
   if (collisionWithShield) {
     createExplosion({ x: enemy.x, y: enemy.y, size: enemy.size, color: enemy.color })
     incrementScore()
+    playShieldKillSound()
   }
 }
 
@@ -636,6 +731,9 @@ class EnemyBall extends Ball {
     super(props)
     this.color = CONFIG.colors.enemy
     this.size = CONFIG.enemy.size
+    // Every spawn warns first: for telegraphTicks frames the enemy sits at
+    // its spawn point as a pulsing ring. It cannot move or collide yet.
+    this.telegraphTicksLeft = CONFIG.enemy.telegraphTicks
     if (props.x === undefined && props.y === undefined) setRandomLocationOnEdge(this)
     if (props.speedX === undefined && props.speedY === undefined) {
       setSpeedTowardsTarget(this, player, CONFIG.enemy.speed)
@@ -643,12 +741,33 @@ class EnemyBall extends Ball {
   }
 
   update() {
+    if (this.telegraphTicksLeft > 0) {
+      this.telegraphTicksLeft--
+      return
+    }
     super.update()
     shiftEnemiesFromKeyboard(this)
     shiftEnemiesFromMouse(this)
     shiftEnemiesFromGamepad(this)
     handleEnemyOutOfBounds(this)
     handleEnemyCollisions(this)
+  }
+
+  draw() {
+    if (this.telegraphTicksLeft > 0) {
+      // The ring shrinks and brightens as activation approaches.
+      const progress = 1 - this.telegraphTicksLeft / CONFIG.enemy.telegraphTicks
+      canvasContext.save()
+      canvasContext.strokeStyle = this.color
+      canvasContext.globalAlpha = 0.35 + 0.65 * progress
+      canvasContext.lineWidth = 2
+      canvasContext.beginPath()
+      canvasContext.arc(this.x * gameSize - gameOffset.x, this.y * gameSize - gameOffset.y, this.size * gameSize * (1.6 - 0.6 * progress), 0, Math.PI * 2)
+      canvasContext.stroke()
+      canvasContext.restore()
+      return
+    }
+    super.draw()
   }
 }
 
@@ -857,6 +976,8 @@ const gameOver = () => {
   player.controller = false
   mouseController = null
   pause = false
+  recordBestScore()
+  playGameOverSound()
 }
 
 const playGame = () => {
@@ -875,6 +996,7 @@ const playGame = () => {
 
 const init = () => {
   idCounter = 0
+  loadBestScore()
   gameSize = getGameSize()
   gameOffset = getGameOffset()
   pause = false
