@@ -23,6 +23,10 @@
  *  - Added (Oct 2026 fixes): spawn telegraphs (enemies warn as a pulsing
  *    ring before they can move or collide), a persistent best score/time
  *    in localStorage, and synthesized sound effects (no audio files).
+ *  - Added (Oct 22, 2026): auto-pause when the tab is hidden, a resize
+ *    handler that refits the playfield without advancing the sim, and a
+ *    survival reward track (a permanent shield upgrade every 3 levels,
+ *    announced on the HUD; nothing extra is persisted).
  *  - Documented: keyboard input looks "inverted" on purpose. The player
  *    stays near screen center and input shifts the world around them.
  * ========================================================================== */
@@ -63,6 +67,12 @@ const CONFIG = {
   },
   waves: {
     ticksPerLevel: 1000,
+  },
+  rewards: {
+    levelsPerReward: 3, // one permanent shield upgrade per 3 levels survived
+    sizeStep: 0.002, // shield size starts at 0.02: +10% per size reward
+    orbitRadiusStep: 0.01, // orbit radius starts at 0.1: +10% per radius reward
+    toastTicks: 240, // how long a reward announcement stays up (~4s at 60fps)
   },
   colors: {
     background: 'black',
@@ -108,6 +118,8 @@ let shields = []
 let enemies = []
 let explosions = []
 let menus = []
+let rewardState = { size: 0, radius: 0, speed: 0, total: 0 }
+let rewardToast = null
 let keysController = null
 let mouseController = null
 let gamepadController = null
@@ -343,6 +355,9 @@ class StartMenu extends Menu {
 }
 
 class InGameMenu extends Menu {
+  update() {
+    if (rewardToast && --rewardToast.ticksLeft <= 0) rewardToast = null
+  }
   draw() {
     if (isGameOver) return
     const spacer = this.getSpacer()
@@ -355,7 +370,20 @@ class InGameMenu extends Menu {
     canvasContext.fillText(`Level ${level}`, padding, padding)
     canvasContext.fillText(`Score: ${score}`, padding, padding + spacer)
     canvasContext.fillText(`Time: ${gameTime}`, padding, padding + spacer * 2)
+    if (rewardState.total > 0) {
+      canvasContext.fillText(`Rewards: ${rewardState.total}`, padding, padding + spacer * 3)
+    }
     canvasContext.restore()
+    if (rewardToast) {
+      canvasContext.save()
+      canvasContext.globalAlpha = Math.min(1, rewardToast.ticksLeft / 60)
+      canvasContext.font = getScaledFont(1.5)
+      canvasContext.fillStyle = CONFIG.colors.text
+      canvasContext.textAlign = 'center'
+      canvasContext.textBaseline = 'hanging'
+      canvasContext.fillText(rewardToast.text, canvas.width / 2, padding)
+      canvasContext.restore()
+    }
   }
 }
 
@@ -853,10 +881,14 @@ class Shield extends Ball {
   }
   update() {
     // Orbit speeds up slightly with level, capped so it stays readable.
-    const levelCap = Math.min(level, CONFIG.shield.maxLevelScaling)
-    this.angle += (Math.PI / (CONFIG.shield.orbitSpeedDivisor / levelCap)) * this.speed
-    this.x = 0.5 + this.orbitRadius * Math.cos(this.angle)
-    this.y = 0.5 + this.orbitRadius * Math.sin(this.angle)
+    // Speed rewards act like extra levels here and share the same cap.
+    const speedLevel = Math.min(level + rewardState.speed, CONFIG.shield.maxLevelScaling)
+    this.angle += (Math.PI / (CONFIG.shield.orbitSpeedDivisor / speedLevel)) * this.speed
+    // Radius and size rewards are permanent for the rest of the run.
+    const orbitRadius = this.orbitRadius + rewardState.radius * CONFIG.rewards.orbitRadiusStep
+    this.size = CONFIG.shield.size + rewardState.size * CONFIG.rewards.sizeStep
+    this.x = 0.5 + orbitRadius * Math.cos(this.angle)
+    this.y = 0.5 + orbitRadius * Math.sin(this.angle)
   }
 }
 
@@ -896,8 +928,36 @@ class AIPlayerBall extends PlayerBall {
 // ---------------------------------------------------------------------------
 // Waves, levels, game loop
 // ---------------------------------------------------------------------------
+// Survival rewards (DESIGN.md, Levels -> rewards): every few levels the
+// run grants one permanent shield upgrade, cycling through three kinds.
+// The design note asks for a faster shield recharge, but shields in this
+// build are never destroyed and have no recharge timer, so the first kind
+// grows the shield itself; the other two widen and speed up the orbit.
+// Rewards live only in memory: a new run starts clean, and nothing about
+// them is written to storage.
+const REWARD_KINDS = [
+  { key: 'size', label: 'Bigger shield' },
+  { key: 'radius', label: 'Wider shield orbit' },
+  { key: 'speed', label: 'Faster shield orbit' },
+]
+
+const resetRewards = () => {
+  rewardState = { size: 0, radius: 0, speed: 0, total: 0 }
+  rewardToast = null
+}
+
+const grantReward = () => {
+  const kind = REWARD_KINDS[rewardState.total % REWARD_KINDS.length]
+  rewardState[kind.key]++
+  rewardState.total++
+  rewardToast = { text: `Reward: ${kind.label}`, ticksLeft: CONFIG.rewards.toastTicks }
+}
+
 const handleLevel = () => {
-  if (gameTime % CONFIG.waves.ticksPerLevel === 0 && gameTime !== 0) level++
+  if (gameTime % CONFIG.waves.ticksPerLevel === 0 && gameTime !== 0) {
+    level++
+    if (!preGame && !isGameOver && level % CONFIG.rewards.levelsPerReward === 0) grantReward()
+  }
 }
 
 const handleSpawnEnemies = () => {
@@ -941,13 +1001,39 @@ const draw = () => {
   ]).forEach((entity) => entity && entity.draw && entity.draw())
 }
 
-window.addEventListener('resize', () => {
+// Refit the playfield to the window. Entity positions are normalized to
+// the field, so refitting is new canvas dims plus fresh size/offset; the
+// clamp keeps anything mid-flight inside the despawn bounds. One drawn
+// frame is enough: running update() here would advance the sim on every
+// resize event, even behind the pause menu.
+const clampEntitiesToField = () => {
+  const margin = CONFIG.enemy.despawnMargin
+  const clampToField = (entity) => {
+    entity.x = Math.min(1 + margin, Math.max(-margin, entity.x))
+    entity.y = Math.min(1 + margin, Math.max(-margin, entity.y))
+  }
+  enemies.forEach(clampToField)
+  explosions.forEach(clampToField)
+}
+
+const handleResize = () => {
   canvas.height = window.innerHeight
   canvas.width = window.innerWidth
   gameSize = getGameSize()
   gameOffset = getGameOffset()
-  update()
+  clampEntitiesToField()
   draw()
+}
+
+window.addEventListener('resize', handleResize)
+window.addEventListener('orientationchange', handleResize)
+
+// Switching tabs mid-run used to let the clock (and the level-ups) run on
+// with no player at the controls. Hiding the tab now pauses the run,
+// exactly as if Escape had been pressed. Menus and the game-over screen
+// are left alone, and coming back never unpauses on its own.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && !preGame && !isGameOver && !pause) pause = true
 })
 
 const togglePause = () => {
@@ -965,6 +1051,7 @@ const newGame = () => {
   score = 0
   gameTime = 0
   level = 1
+  resetRewards()
 }
 
 const checkIsGameOver = () => player.health <= 0
@@ -1007,6 +1094,7 @@ const init = () => {
   isGameOver = true
   preGame = true
   level = 3
+  resetRewards()
   player = new AIPlayerBall()
   shields = []
   enemies = []
